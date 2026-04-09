@@ -1,0 +1,64 @@
+[project]
+name = "robo"
+version = "0.1.0"
+description = "On-device multimodal robot agent — agentic multi-step tool calling, headless audio/vision"
+requires-python = ">=3.10"
+dependencies = [
+    # LLM inference (has aarch64/Jetson wheels)
+    "litert-lm>=0.10.1",
+    # Web server (monitoring dashboard + WebSocket)
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "websockets>=12.0",
+    # TTS — platform-specific backends
+    # Jetson/Linux: kokoro-onnx uses ONNX Runtime (CPU by default; install
+    #   onnxruntime-gpu from NVIDIA for CUDA acceleration on Jetson)
+    "kokoro-onnx>=0.5.0; sys_platform == 'linux'",
+    # macOS Apple Silicon: GPU-accelerated via MLX
+    "mlx-audio>=0.4.2; sys_platform == 'darwin'",
+    "misaki[en]>=0.9.4; sys_platform == 'darwin'",
+    "num2words>=0.5.14; sys_platform == 'darwin'",
+    # Audio I/O (microphone + speaker via ALSA on Jetson)
+    "sounddevice>=0.4.6",
+    "soundfile>=0.12.1",
+    # Numerics
+    "numpy>=1.26.0",
+    # Image handling
+    "pillow>=10.0.0",
+    # Model download
+    "huggingface-hub>=0.23.0",
+]
+
+[project.optional-dependencies]
+# Camera capture — choose the right build for your platform:
+#   x86/macOS:  pip install robo[camera]
+#   Jetson:     sudo apt install python3-opencv  (comes with GStreamer support)
+camera = ["opencv-python-headless>=4.8.0"]
+
+[project.scripts]
+robo        = "robo.agent:cli"
+robo-server = "robo.server:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatchling.build.targets.wheel]
+packages = ["src/robo"]
+
+# ── Jetson / aarch64 notes ─────────────────────────────────────────────────────
+# JetPack 6.x ships Python 3.10 — this package targets >=3.10.
+#
+# OpenCV (with GStreamer for CSI cameras):
+#   sudo apt install python3-opencv
+#   Do NOT install opencv-python from PyPI on Jetson — it lacks GStreamer support.
+#
+# onnxruntime-gpu (for GPU-accelerated TTS on Jetson):
+#   The PyPI wheel does not support aarch64+CUDA. Install NVIDIA's build:
+#   pip install https://nvidia.box.com/shared/static/<wheel>.whl
+#   See https://elinux.org/Jetson_Zoo#ONNX_Runtime for the current URL.
+#   Without it, TTS runs on CPU (~0.3 s/sentence on Orin — fast enough).
+#
+# litert-lm GPU backend on Jetson:
+#   Uses OpenCL/CUDA delegates automatically when Backend.GPU is selected.
+#   Make sure libOpenCL.so is present (part of JetPack).

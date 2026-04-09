@@ -1,0 +1,16 @@
+{
+  "_comment": "Robo agent configuration. See README.md for full documentation.",
+  "name": "spacewalker",
+  "tts": "local",
+  "_tts_options": "local (Kokoro via sounddevice) | unitree (robot's built-in speaker)",
+  "hardware": {
+    "enabled": false,
+    "_enabled_comment": "Set to true to connect to the physical Unitree G1",
+    "type": "unitree_g1",
+    "network_interface": "eth0",
+    "_network_interface_comment": "Run `ip link` to find the interface connected to the robot",
+    "speaker_id": 0,
+    "_speaker_id_options": "0 or 1 (different voice timbres)",
+    "volume": 80
+  }
+}

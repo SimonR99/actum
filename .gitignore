@@ -1,0 +1,93 @@
+# ------------------------------
+# Python bytecode and caches
+# ------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ------------------------------
+# Virtual environments
+# ------------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# ------------------------------
+# Build / packaging artifacts
+# ------------------------------
+build/
+dist/
+site/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# ------------------------------
+# Test, coverage, profiling
+# ------------------------------
+.pytest_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.prof
+*.profraw
+*.profdata
+
+# ------------------------------
+# Type checker / linter caches
+# ------------------------------
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+
+# ------------------------------
+# Jupyter
+# ------------------------------
+.ipynb_checkpoints/
+
+# ------------------------------
+# IDE / editor files
+# ------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ------------------------------
+# OS files
+# ------------------------------
+.DS_Store
+Thumbs.db
+
+# ------------------------------
+# Logs and runtime outputs
+# ------------------------------
+*.log
+*.pid
+logs/
+
+# ------------------------------
+# Local environment/config
+# ------------------------------
+.env
+.env.*
+!.env.example
+
+# ------------------------------
+# Common local data/cache dirs
+# ------------------------------
+.cache/
+tmp/
+temp/
+
+# ------------------------------
+# Project-specific generated artifact seen in workspace
+# ------------------------------
+default.profraw
+
