@@ -97,6 +97,7 @@ def open_camera(source: str | int | None = None):
         cam = cv2.VideoCapture(source)
 
     if cam.isOpened():
+        _configure_low_latency_camera(cam)
         label = "CSI (GStreamer)" if source == _CSI_PIPELINE else f"index {source}"
         print(f"[camera] opened: {label}")
         return cam
@@ -106,6 +107,7 @@ def open_camera(source: str | int | None = None):
         print("[camera] CSI pipeline failed, trying USB index 0")
         cam = cv2.VideoCapture(0)
         if cam.isOpened():
+            _configure_low_latency_camera(cam)
             print("[camera] opened: USB index 0 (fallback)")
             return cam
 
@@ -113,12 +115,16 @@ def open_camera(source: str | int | None = None):
     return None
 
 
-def capture_jpeg(cam, width: int = 320, quality: int = 70) -> str | None:
+def capture_jpeg(cam, width: int = 320, quality: int = 70, drain_frames: int | None = None) -> str | None:
     """Read one frame and return as base64-encoded JPEG, or None."""
     if cam is None:
         return None
     try:
         import cv2
+        if drain_frames is None:
+            drain_frames = _env_int("ACTUM_CAMERA_DRAIN_FRAMES", "ROBO_CAMERA_DRAIN_FRAMES", 1, 0, 5)
+        for _ in range(max(0, drain_frames)):
+            cam.grab()
         ok, frame = cam.read()
         if not ok:
             return None
@@ -130,6 +136,26 @@ def capture_jpeg(cam, width: int = 320, quality: int = 70) -> str | None:
     except Exception as e:
         print(f"[camera] capture error: {e}")
         return None
+
+
+def _configure_low_latency_camera(cam):
+    """Ask OpenCV backends to avoid accumulating stale frames."""
+    try:
+        import cv2
+        cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    except Exception:
+        pass
+
+
+def _env_int(name: str, legacy_name: str | None, default: int, minimum: int, maximum: int) -> int:
+    value = _env(name, legacy_name)
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        return default
+    return max(minimum, min(maximum, parsed))
 
 
 # ── VAD ────────────────────────────────────────────────────────────────────────

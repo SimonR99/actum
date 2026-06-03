@@ -6,6 +6,15 @@
 ARG CUDA_VERSION=12.4.1
 ARG UBUNTU_VERSION=22.04
 
+# ── Frontend Stage: React dashboard ───────────────────────────────────────
+FROM node:22-bookworm-slim as frontend-builder
+
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend ./
+RUN npm run build
+
 # ── Base Stage: NVIDIA CUDA + Python 3.10 ────────────────────────────────
 FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} as base
 
@@ -79,6 +88,7 @@ COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
 # Copy project source
 COPY pyproject.toml README.md ./
 COPY src ./src
+COPY --from=frontend-builder /frontend/dist ./frontend/dist
 
 # Install project in editable mode (already in venv, but ensure sys.path is correct)
 RUN pip install -e .

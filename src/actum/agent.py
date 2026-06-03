@@ -111,6 +111,7 @@ class RobotAgent:
 
         self._action_log: list[dict] = []
         self._camera = None
+        self._camera_lock = threading.Lock()
         self._background_stop_requested = False
 
     # ── Startup / shutdown ─────────────────────────────────────────────────
@@ -153,7 +154,9 @@ class RobotAgent:
         if self.engine:
             self.engine.__exit__(None, None, None)
         if self._camera:
-            self._camera.release()
+            with self._camera_lock:
+                self._camera.release()
+                self._camera = None
         self.runtime.close()
 
     def _init_backend(self):
@@ -165,9 +168,10 @@ class RobotAgent:
 
     # ── Perception ─────────────────────────────────────────────────────────
 
-    def capture_frame(self) -> str | None:
+    def capture_frame(self, width: int = 320, quality: int = 70, drain_frames: int | None = None) -> str | None:
         """Return a base64 JPEG from the camera, or None."""
-        return capture_jpeg(self._camera)
+        with self._camera_lock:
+            return capture_jpeg(self._camera, width=width, quality=quality, drain_frames=drain_frames)
 
     # ── Core agentic loop ──────────────────────────────────────────────────
 

@@ -16,20 +16,24 @@ import asyncio
 import json
 import os
 import threading
+import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from actum.agent import RobotAgent
 from actum.perception import AudioCapture
 
 
-# ── Dashboard HTML (external file) ───────────────────────────────────────────
+# ── Dashboard assets ────────────────────────────────────────────────────────
 
 _DASHBOARD_PATH = Path(__file__).with_name("dashboard.html")
+_FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+_FRONTEND_INDEX = _FRONTEND_DIST / "index.html"
 
 
 def _load_dashboard_html() -> str:
@@ -40,13 +44,78 @@ def _load_dashboard_html() -> str:
         return f"<html><body><h1>Dashboard unavailable</h1><pre>{exc}</pre></body></html>"
 
 
+# ── Camera streaming ───────────────────────────────────────────────────────────
+
+class CameraFrameStream:
+    """Continuously keep the freshest dashboard frame outside the WebSocket loop."""
+
+    def __init__(self, agent: RobotAgent):
+        self.agent = agent
+        self.interval_s = _camera_stream_interval()
+        self.width = _camera_stream_width()
+        self.quality = _camera_stream_quality()
+        self.drain_frames = _camera_stream_drain_frames()
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._latest: dict | None = None
+        self._frame_id = 0
+
+    def start(self):
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, name="actum-camera-stream", daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=1.5)
+
+    def latest_after(self, frame_id: int) -> dict | None:
+        with self._lock:
+            if not self._latest or self._latest["frame_id"] <= frame_id:
+                return None
+            return dict(self._latest)
+
+    def _run(self):
+        while not self._stop.is_set():
+            started_at = time.monotonic()
+            frame = self.agent.capture_frame(
+                width=self.width,
+                quality=self.quality,
+                drain_frames=self.drain_frames,
+            )
+            if frame:
+                with self._lock:
+                    self._frame_id += 1
+                    self._latest = {
+                        "type": "frame",
+                        "jpeg": frame,
+                        "frame_id": self._frame_id,
+                        "sent_at": time.time(),
+                    }
+            elapsed = time.monotonic() - started_at
+            self._stop.wait(max(0.01, self.interval_s - elapsed))
+
+
 # ── Route attachment ───────────────────────────────────────────────────────────
 
 def attach_server(agent: RobotAgent, app: FastAPI):
     """Wire monitoring routes onto a FastAPI app."""
+    if not hasattr(app.state, "camera_stream"):
+        app.state.camera_stream = CameraFrameStream(agent)
+    camera_stream: CameraFrameStream = app.state.camera_stream
+
+    assets_dir = _FRONTEND_DIST / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="frontend-assets")
 
     @app.get("/")
     async def dashboard():
+        if _FRONTEND_INDEX.exists():
+            return FileResponse(_FRONTEND_INDEX)
         return HTMLResponse(_load_dashboard_html())
 
     @app.post("/command")
@@ -184,6 +253,17 @@ def attach_server(agent: RobotAgent, app: FastAPI):
         await ws.accept()
         q: asyncio.Queue = asyncio.Queue(maxsize=64)
         agent._status_subscribers.append(q)
+        camera_stream.start()
+        frame_interval_s = camera_stream.interval_s
+        last_frame_id = 0
+
+        async def send_latest_frame():
+            nonlocal last_frame_id
+            payload = camera_stream.latest_after(last_frame_id)
+            if not payload:
+                return
+            last_frame_id = int(payload["frame_id"])
+            await ws.send_text(json.dumps(payload))
 
         # Send current state on connect
         await ws.send_text(json.dumps({"type": "memory", "data": agent.runtime.memory.snapshot()}))
@@ -200,14 +280,12 @@ def attach_server(agent: RobotAgent, app: FastAPI):
                 }
             )
         )
-        frame = agent.capture_frame()
-        if frame:
-            await ws.send_text(json.dumps({"type": "frame", "jpeg": frame}))
+        await send_latest_frame()
 
         try:
             while True:
                 try:
-                    payload = await asyncio.wait_for(q.get(), timeout=0.35)
+                    payload = await asyncio.wait_for(q.get(), timeout=frame_interval_s)
                 except asyncio.TimeoutError:
                     payload = None
 
@@ -229,13 +307,12 @@ def attach_server(agent: RobotAgent, app: FastAPI):
                     await ws.send_text(json.dumps({"type": "memory", "data": agent.runtime.memory.snapshot()}))
                     await ws.send_text(json.dumps({"type": "state", "data": agent.runtime.snapshot()}))
 
-                frame = agent.capture_frame()
-                if frame:
-                    await ws.send_text(json.dumps({"type": "frame", "jpeg": frame}))
+                await send_latest_frame()
         except WebSocketDisconnect:
             pass
         finally:
-            agent._status_subscribers.remove(q)
+            if q in agent._status_subscribers:
+                agent._status_subscribers.remove(q)
 
 
 # ── Lifespan ───────────────────────────────────────────────────────────────────
@@ -247,6 +324,9 @@ async def lifespan(app: FastAPI):
 
     print("Loading models…")
     await loop.run_in_executor(None, agent.load_models)
+    camera_stream: CameraFrameStream | None = getattr(app.state, "camera_stream", None)
+    if camera_stream:
+        camera_stream.start()
 
     def on_speech(wav_b64: str):
         event: dict = {"source": "language", "audio": wav_b64}
@@ -262,6 +342,8 @@ async def lifespan(app: FastAPI):
     background_task = asyncio.create_task(agent.background_loop())
     yield
 
+    if camera_stream:
+        camera_stream.stop()
     mic.stop()
     agent.stop_background_loop()
     background_task.cancel()
@@ -283,6 +365,88 @@ def cli():
 
     port = int(os.environ.get("PORT", "8000"))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
+
+def _camera_stream_interval() -> float:
+    raw = _env_first(
+        "ACTUM_CAMERA_STREAM_INTERVAL_S",
+        "SENSORIMOTOR_CAMERA_STREAM_INTERVAL_S",
+        "ROBO_CAMERA_STREAM_INTERVAL_S",
+    )
+    if raw is None:
+        fps = _env_float(
+            ("ACTUM_CAMERA_STREAM_FPS", "SENSORIMOTOR_CAMERA_STREAM_FPS", "ROBO_CAMERA_STREAM_FPS"),
+            6.7,
+            1.0,
+            20.0,
+        )
+        return 1.0 / fps
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 0.15
+    return max(0.05, min(1.0, value))
+
+
+def _camera_stream_width() -> int:
+    return _env_int(
+        ("ACTUM_CAMERA_STREAM_WIDTH", "SENSORIMOTOR_CAMERA_STREAM_WIDTH", "ROBO_CAMERA_STREAM_WIDTH"),
+        320,
+        160,
+        1280,
+    )
+
+
+def _camera_stream_quality() -> int:
+    return _env_int(
+        ("ACTUM_CAMERA_STREAM_QUALITY", "SENSORIMOTOR_CAMERA_STREAM_QUALITY", "ROBO_CAMERA_STREAM_QUALITY"),
+        60,
+        30,
+        95,
+    )
+
+
+def _camera_stream_drain_frames() -> int:
+    return _env_int(
+        (
+            "ACTUM_CAMERA_STREAM_DRAIN_FRAMES",
+            "SENSORIMOTOR_CAMERA_STREAM_DRAIN_FRAMES",
+            "ROBO_CAMERA_STREAM_DRAIN_FRAMES",
+        ),
+        2,
+        0,
+        8,
+    )
+
+
+def _env_first(*names: str) -> str | None:
+    for name in names:
+        value = os.environ.get(name)
+        if value is not None:
+            return value
+    return None
+
+
+def _env_float(names: tuple[str, ...], default: float, minimum: float, maximum: float) -> float:
+    raw = _env_first(*names)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return max(minimum, min(maximum, value))
+
+
+def _env_int(names: tuple[str, ...], default: int, minimum: int, maximum: int) -> int:
+    raw = _env_first(*names)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return max(minimum, min(maximum, value))
 
 
 if __name__ == "__main__":

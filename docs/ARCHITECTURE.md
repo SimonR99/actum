@@ -39,7 +39,8 @@ This keeps the robot dependable even if the agent framework changes.
    - Refuses motion/manipulation calls because a laptop is stationary.
 
 6. Dashboard
-   - Shows triggers, camera, action trace, plan/intent, behavior tree, memory, live map, body perception, settings, and tool graph.
+   - Shows triggers, camera, action trace, plan/intent, behavior tree, memory, live map, body perception, robot/backend settings, model/tool settings, and tool graph.
+   - Built as a React/Tailwind frontend in `frontend/`, served from `frontend/dist` by the FastAPI server.
 
 ## Framework Strategy
 

@@ -1,6 +1,7 @@
 # Docker
 
 Docker images are for local development, dashboard operation, and Jetson deployment.
+The image build compiles the React/Tailwind dashboard from `frontend/` and serves the generated bundle through `actum-server`.
 
 ## Build
 

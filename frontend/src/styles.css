@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: #f4f6f8;
+    color: #17202a;
+  }
+
+  button,
+  input,
+  select {
+    font: inherit;
+    letter-spacing: 0;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply min-h-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-panel;
+  }
+
+  .panel-header {
+    @apply flex min-h-11 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3;
+  }
+
+  .panel-title {
+    @apply text-xs font-bold uppercase tracking-normal text-slate-700;
+  }
+
+  .panel-meta {
+    @apply truncate text-xs text-slate-500;
+  }
+
+  .field {
+    @apply h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100;
+  }
+
+  .btn {
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 active:scale-[0.99];
+  }
+
+  .btn-primary {
+    @apply border-blue-600 bg-blue-600 text-white hover:bg-blue-700;
+  }
+
+  .btn-quiet {
+    @apply border-transparent bg-slate-100 text-slate-700 hover:bg-slate-200;
+  }
+
+  .chip {
+    @apply inline-flex h-7 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600;
+  }
+
+  .chip-ok {
+    @apply border-emerald-200 bg-emerald-50 text-emerald-700;
+  }
+
+  .chip-warn {
+    @apply border-amber-200 bg-amber-50 text-amber-700;
+  }
+}

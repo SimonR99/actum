@@ -18,6 +18,7 @@ ENV/
 # ------------------------------
 build/
 dist/
+node_modules/
 site/
 *.egg-info/
 .eggs/
@@ -90,4 +91,3 @@ temp/
 # Project-specific generated artifact seen in workspace
 # ------------------------------
 default.profraw
-

@@ -173,9 +173,26 @@ Docker:
 ./docker/run-headless.sh
 ```
 
+Frontend:
+
+```bash
+# Served by actum-server after a build
+npm install --prefix frontend
+npm run build --prefix frontend
+
+# UI development server; keep actum-server running on port 8000
+npm run dev --prefix frontend
+```
+
 Hardware environment variables:
 
 - `ACTUM_CAMERA`: `auto`, `usb`, `csi`, device index, device path, or GStreamer pipeline.
+- `ACTUM_CAMERA_STREAM_INTERVAL_S`: dashboard camera send interval in seconds, default `0.15`.
+- `ACTUM_CAMERA_STREAM_FPS`: dashboard camera frame rate if interval is unset, default `6.7`.
+- `ACTUM_CAMERA_STREAM_WIDTH`: dashboard JPEG width, default `320`.
+- `ACTUM_CAMERA_STREAM_QUALITY`: dashboard JPEG quality, default `60`.
+- `ACTUM_CAMERA_STREAM_DRAIN_FRAMES`: stale frames to drop for the dashboard stream, default `2`.
+- `ACTUM_CAMERA_DRAIN_FRAMES`: stale frames to drop for one-off captures such as `look()`, default `1`.
 - `ACTUM_AUDIO_DEVICE`: sounddevice/ALSA device such as `hw:1,0`.
 - `ACTUM_VAD_DEBUG`: set to any value to print voice activity detector diagnostics.
 
@@ -223,7 +240,7 @@ The dashboard streams:
 - behavior tree state
 - tool graph nodes with results
 - live map and body perception
-- model/provider/tool settings
+- robot/backend, model/provider, and tool settings
 - memory
 - backend state
 - companion/personality state
@@ -243,6 +260,9 @@ src/actum/
   core/                 # events, intent, memory, companion policy, schemas
   backends/             # laptop, fake, Unitree G1, LeKiwi
   integrations/         # optional MCP and web adapters
+frontend/
+  src/                  # React/Tailwind dashboard
+  dist/                 # generated dashboard served by actum-server
 ```
 
 ## Development

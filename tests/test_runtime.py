@@ -13,6 +13,7 @@ def test_runtime_snapshot_exposes_capabilities_and_intent():
     assert "list_mcp_servers" in names
     assert snapshot["intent"]["goal"] == "inspect the table"
     assert snapshot["backend"] == "fake"
+    assert snapshot["robot_config"]["backend"] == "fake"
     assert snapshot["companion"]["always_on"] is True
     assert "memory" in snapshot
     assert "behavior" in snapshot
