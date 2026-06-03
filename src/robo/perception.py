@@ -123,27 +123,37 @@ def capture_jpeg(cam, width: int = 320, quality: int = 70) -> str | None:
 # ── VAD ────────────────────────────────────────────────────────────────────────
 
 class EnergyVAD:
-    """RMS energy-based voice activity detector.
+    """Adaptive RMS energy-based voice activity detector.
 
-    Simple and dependency-free. Works well in quiet robot environments.
-    For noisy settings (outdoor, factory floor) consider replacing with
-    silero-vad: https://github.com/snakers4/silero-vad
+    Estimates the ambient noise floor in real-time and sets speech/silence
+    thresholds relative to it — no manual tuning needed across environments.
+
+    speech starts  when rms > noise_floor * speech_ratio   (default 2×)
+    speech ends    when rms < noise_floor * silence_ratio  (default 1.3×)
+                   for silence_chunks consecutive 30 ms frames
+
+    For very noisy environments (outdoor, factory floor) consider replacing
+    with silero-vad: https://github.com/snakers4/silero-vad
     """
 
     def __init__(
         self,
-        speech_threshold: float = 0.02,
-        silence_threshold: float = 0.010,
-        min_speech_chunks: int = 10,   # ~300 ms
-        silence_chunks: int = 25,      # ~750 ms
-        pre_roll_chunks: int = 5,      # ~150 ms pre-speech padding
+        speech_ratio: float = 2.0,
+        silence_ratio: float = 1.3,
+        noise_floor_init: float = 0.030,  # safe starting estimate
+        noise_floor_alpha: float = 0.005,  # EMA adaptation speed (~6 s to converge)
+        min_speech_chunks: int = 10,       # ~300 ms
+        silence_chunks: int = 25,          # ~750 ms
+        pre_roll_chunks: int = 5,          # ~150 ms pre-speech padding
     ):
-        self.speech_threshold = speech_threshold
-        self.silence_threshold = silence_threshold
+        self.speech_ratio = speech_ratio
+        self.silence_ratio = silence_ratio
+        self.noise_floor_alpha = noise_floor_alpha
         self.min_speech_chunks = min_speech_chunks
         self.silence_chunks = silence_chunks
         self.pre_roll_chunks = pre_roll_chunks
 
+        self._noise_floor = noise_floor_init
         self._pre_roll: list[np.ndarray] = []
         self._buffer: list[np.ndarray] = []
         self._in_speech = False
@@ -153,18 +163,33 @@ class EnergyVAD:
         """Feed one audio chunk. Returns complete utterance PCM when speech ends."""
         rms = float(np.sqrt(np.mean(chunk ** 2)))
 
+        speech_thr = self._noise_floor * self.speech_ratio
+        silence_thr = self._noise_floor * self.silence_ratio
+
+        if os.environ.get("ROBO_VAD_DEBUG"):
+            print(
+                f"[vad] rms={rms:.4f} floor={self._noise_floor:.4f} "
+                f"s_thr={speech_thr:.4f} q_thr={silence_thr:.4f} "
+                f"in_speech={self._in_speech} sc={self._silence_count}"
+            )
+
         if not self._in_speech:
+            # Adapt noise floor only while not capturing speech
+            self._noise_floor = (
+                (1 - self.noise_floor_alpha) * self._noise_floor
+                + self.noise_floor_alpha * rms
+            )
             self._pre_roll.append(chunk)
             if len(self._pre_roll) > self.pre_roll_chunks:
                 self._pre_roll.pop(0)
-            if rms > self.speech_threshold:
+            if rms > speech_thr:
                 self._in_speech = True
                 self._silence_count = 0
                 self._buffer = list(self._pre_roll)
-                print("[vad] speech started")
+                print(f"[vad] speech started (floor={self._noise_floor:.4f})")
         else:
             self._buffer.append(chunk)
-            if rms < self.silence_threshold:
+            if rms < silence_thr:
                 self._silence_count += 1
                 if self._silence_count >= self.silence_chunks:
                     self._in_speech = False
@@ -176,7 +201,9 @@ class EnergyVAD:
                     self._pre_roll = []
                     return result
             else:
-                self._silence_count = 0
+                # Decay instead of hard reset so intermittent background noise
+                # doesn't prevent silence from accumulating.
+                self._silence_count = max(0, self._silence_count - 1)
 
         return None
 

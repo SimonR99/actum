@@ -214,18 +214,25 @@ body[data-view="chat"] .rightCol {
   display: grid;
   gap: 1rem;
   min-height: 0;
-  grid-template-rows: minmax(0, 1.12fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1.05fr) minmax(0, .9fr) minmax(0, .9fr) minmax(0, .8fr);
   overflow: hidden;
+}
+.cameraPanelBody {
+  padding: .75rem;
+  min-height: 0;
+  height: 100%;
+  display: flex;
 }
 #cameraWrap {
   position: relative;
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
+  width: 100%;
   height: 100%;
   background: #090f16;
 }
-#camera { width: 100%; height: 100%; object-fit: cover; display: block; }
+#camera { width: 100%; height: 100%; object-fit: contain; display: block; }
 #cameraPh {
   position: absolute;
   inset: 0;
@@ -248,6 +255,48 @@ body[data-view="chat"] .rightCol {
   background: #0e1723;
   min-height: 0;
 }
+.planBody, .graphBody {
+  overflow-y: auto;
+  display: grid;
+  gap: .45rem;
+  padding: .75rem;
+  min-height: 0;
+}
+.goal {
+  color: #f3d579;
+  font-weight: 800;
+  font-size: .86rem;
+}
+.step {
+  display: grid;
+  grid-template-columns: 1.15rem minmax(0, 1fr);
+  gap: .45rem;
+  align-items: start;
+  border: 1px solid #1b2a3a;
+  background: #101b28;
+  border-radius: 8px;
+  padding: .42rem .5rem;
+  font-size: .79rem;
+}
+.stepDot {
+  width: .7rem;
+  height: .7rem;
+  border-radius: 999px;
+  background: #3f536a;
+  margin-top: .18rem;
+}
+.step.active .stepDot { background: #5fd0ff; box-shadow: 0 0 .55rem #5fd0ff88; }
+.step.done .stepDot { background: #59da8e; }
+.step.blocked .stepDot { background: #ff976b; }
+.graphNode {
+  border-left: 3px solid #5f7690;
+  background: #101b28;
+  border-radius: 8px;
+  padding: .42rem .55rem;
+  font-size: .78rem;
+}
+.graphNode.ok { border-color: #59da8e; }
+.graphNode.fail { border-color: #ff976b; }
 .ev {
   border-left: 3px solid #2f475f;
   background: #122032;
@@ -301,7 +350,7 @@ body[data-view="chat"] .rightCol {
   html, body { overflow: auto; }
   main { grid-template-columns: 1fr; height: auto; overflow: visible; }
   .rightCol { grid-template-rows: auto; }
-  .stack { grid-template-rows: auto auto auto; }
+  .stack { grid-template-rows: auto auto auto auto; }
   #cameraWrap { aspect-ratio: 4/3; height: auto; }
 }
 </style>
@@ -358,7 +407,7 @@ body[data-view="chat"] .rightCol {
     <div class="stack">
       <section class="panel">
         <h2>Live camera</h2>
-        <div style="padding:.75rem;">
+        <div class="cameraPanelBody">
           <div id="cameraWrap">
             <img id="camera" alt="Camera feed">
             <div id="cameraPh">Waiting for camera frames...</div>
@@ -369,6 +418,16 @@ body[data-view="chat"] .rightCol {
       <section class="panel">
         <h2>Action trace</h2>
         <div id="traceLog"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Intent</h2>
+        <div id="planBody" class="planBody"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Tool graph</h2>
+        <div id="graphBody" class="graphBody"></div>
       </section>
 
       <section class="panel">
@@ -390,6 +449,8 @@ const robotTitle = document.getElementById('robotTitle');
 
 const chatFeed = document.getElementById('chatFeed');
 const traceLog = document.getElementById('traceLog');
+const planBody = document.getElementById('planBody');
+const graphBody = document.getElementById('graphBody');
 const mt = document.getElementById('mt');
 const cam = document.getElementById('camera');
 const camPh = document.getElementById('cameraPh');
@@ -503,6 +564,30 @@ function renderMem(data) {
   mt.innerHTML = Object.entries(data).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
 }
 
+function renderState(state) {
+  if (!state) return;
+  const intent = state.intent || {};
+  const steps = intent.steps || [];
+  const goal = intent.goal || 'No active task';
+  planBody.innerHTML = `
+    <div class="goal">${goal}</div>
+    ${steps.map(s => `
+      <div class="step ${s.status || 'pending'}">
+        <div class="stepDot"></div>
+        <div><strong>${s.status || 'pending'}</strong> · ${s.label || s.id}</div>
+      </div>
+    `).join('') || '<div class="sub">Waiting for a plan...</div>'}
+  `;
+
+  const nodes = state.tool_graph || [];
+  graphBody.innerHTML = nodes.slice(-16).map(n => {
+    const ok = n.result ? n.result.ok : null;
+    const cls = ok === true ? 'ok' : ok === false ? 'fail' : '';
+    const msg = n.result ? n.result.message : 'queued';
+    return `<div class="graphNode ${cls}"><strong>${n.type}</strong><br>${msg}</div>`;
+  }).join('') || '<div class="sub">No tool calls yet...</div>';
+}
+
 async function refreshSettings() {
   const r = await fetch('/settings');
   const s = await r.json();
@@ -599,6 +684,11 @@ ws.onmessage = e => {
     setMode(m.mode || 'local');
     modeChip.textContent = `mode: ${m.mode || 'local'}`;
     modeChip.className = 'chip' + ((m.mode === 'unitree' && !m.hardware_connected) ? ' warn' : '');
+    return;
+  }
+
+  if (m.type === 'state') {
+    renderState(m.data);
     return;
   }
 

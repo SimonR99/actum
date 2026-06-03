@@ -1,0 +1,103 @@
+# Jetson-optimized Dockerfile for vlm-g1 robot agent
+# For Jetson Orin (aarch64) with JetPack 6.x
+# Build: docker build -f Dockerfile.jetson -t vlm-g1:jetson .
+# 
+# Note: This is pre-configured for Jetson's OpenCL-based CUDA.
+# No need for separate NVIDIA base image; use nvcr.io/nvidia/l4t-base
+
+ARG JETPACK_VERSION=6.0
+ARG L4T_BASE_IMAGE=nvcr.io/nvidia/l4t-base:r36.2.0
+
+# ── Base Stage: Jetson L4T + Python 3.10 ──────────────────────────────────
+FROM ${L4T_BASE_IMAGE} as base
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Python 3.10 already included in JetPack 6.x
+# Confirm and install additional dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
+    # OpenCV with GStreamer (CSI camera support) — pre-installed but ensure it's there
+    python3-opencv \
+    libopencv-dev \
+    # Audio
+    portaudio19-dev \
+    libportaudio2 \
+    alsa-utils \
+    # Build tools
+    build-essential \
+    cmake \
+    git \
+    wget \
+    # Other essentials
+    libffi-dev \
+    libssl-dev \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment (optional but keeps things clean)
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH" \
+    VIRTUAL_ENV=/opt/venv
+
+# Upgrade pip
+RUN pip install --upgrade pip setuptools wheel
+
+# ── Builder Stage: Install dependencies ────────────────────────────────────
+FROM base as builder
+
+WORKDIR /build
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+
+# Install dependencies (kokoro-onnx for Linux/Jetson)
+# Note: On Jetson, consider using onnxruntime-gpu if available
+RUN pip install -e ".[camera]"
+
+# Pre-download models (optional, helps on first run)
+# Comment out if you want a smaller image
+RUN python3 -c "from huggingface_hub import snapshot_download; \
+    snapshot_download('litert-community/gemma-4-E2B-it-litert-lm', \
+    allow_patterns='gemma-4-E2B-it.litertlm', \
+    cache_dir='/root/.cache/huggingface')" || true
+
+# ── Runtime Stage ──────────────────────────────────────────────────────────
+FROM base as runtime
+
+WORKDIR /workspace
+
+# Copy venv from builder
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
+
+# Copy project
+COPY pyproject.toml README.md ./
+COPY src ./src
+
+# Install in editable mode
+RUN pip install -e .
+
+# Create data directories
+RUN mkdir -p /workspace/models /workspace/config /workspace/logs
+
+# Audio config for Jetson
+RUN echo "pcm.!default { type hw card 0 }" > /etc/asound.conf
+
+ENV MODEL_PATH=/root/.cache/huggingface/hub/litert-community/gemma-4-E2B-it-litert-lm/snapshots/*/gemma-4-E2B-it.litertlm \
+    PORT=8000 \
+    PYTHONPATH=/workspace/src:${PYTHONPATH}
+
+# Jetson-specific: use OpenCL acceleration for litert-lm
+ENV CUDA_VISIBLE_DEVICES=0 \
+    ENABLE_OPENCL=1
+
+EXPOSE 8000
+
+CMD ["robo-server"]

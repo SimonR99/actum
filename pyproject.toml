@@ -34,6 +34,11 @@ dependencies = [
 #   x86/macOS:  pip install robo[camera]
 #   Jetson:     sudo apt install python3-opencv  (comes with GStreamer support)
 camera = ["opencv-python-headless>=4.8.0"]
+dev = ["pytest>=8.0"]
+# Hardware/policy stacks are optional so local tests and dashboard work without robots.
+unitree = ["unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git"]
+lekiwi = ["lerobot[lekiwi]>=0.5.1"]
+policies = ["lerobot>=0.5.1"]
 
 [project.scripts]
 robo        = "robo.agent:cli"
@@ -45,6 +50,12 @@ build-backend = "hatchling.build"
 
 [tool.hatchling.build.targets.wheel]
 packages = ["src/robo"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 # ── Jetson / aarch64 notes ─────────────────────────────────────────────────────
 # JetPack 6.x ships Python 3.10 — this package targets >=3.10.

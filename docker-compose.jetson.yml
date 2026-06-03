@@ -1,0 +1,74 @@
+version: '3.8'
+
+# Jetson override - use this with: docker compose -f docker-compose.yml -f docker-compose.jetson.yml up
+# Or: docker-compose -f docker-compose.jetson.yml up
+#
+# This file overrides the x86 GPU setup for Jetson-specific configuration
+
+services:
+  robo:
+    # Rebuild for Jetson architecture (aarch64)
+    build:
+      context: .
+      dockerfile: Dockerfile.jetson
+      args:
+        JETPACK_VERSION: "6.0"
+        L4T_BASE_IMAGE: "nvcr.io/nvidia/l4t-base:r36.2.0"
+    
+    image: vlm-g1:jetson
+    
+    # Jetson GPU (CUDA cores, same as x86 but using OpenCL backend)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    # Jetson-specific environment
+    environment:
+      - PORT=8000
+      - MODEL_PATH=/root/.cache/huggingface/hub/litert-community/gemma-4-E2B-it-litert-lm/snapshots/*/gemma-4-E2B-it.litertlm
+      - PYTHONUNBUFFERED=1
+      # Jetson-specific: use OpenCL/CUDA delegates
+      - ENABLE_OPENCL=1
+      - CUDA_VISIBLE_DEVICES=0
+      # Audio device
+      - ROBO_AUDIO_DEVICE=hw:0,0
+      # Camera: CSI is preferred on Jetson (use auto detection)
+      - ROBO_CAMERA=csi
+    
+    volumes:
+      - ./config.json:/workspace/config.json:ro
+      - huggingface-cache:/root/.cache/huggingface
+      - ./logs:/workspace/logs
+      
+      # CSI camera (typically available by default on Jetson)
+      # - /dev/video0:/dev/video0  # Uncomment if needed
+      
+      # Audio devices
+      - /dev/snd:/dev/snd
+    
+    devices:
+      # Audio
+      - /dev/snd
+      # Camera (if USB)
+      # - /dev/video0
+    
+    ports:
+      - "8000:8000"
+    
+    stdin_open: true
+    tty: true
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # Longer startup time on Jetson
+
+volumes:
+  huggingface-cache:
+    driver: local

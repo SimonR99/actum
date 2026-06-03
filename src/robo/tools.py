@@ -3,8 +3,8 @@
 Each method is registered with litert_lm as a callable tool. The LLM chains
 multiple tool calls within a single turn (e.g. look → navigate → speak → done).
 
-Hardware integration points are marked with # --- hardware hook ---
-Replace those lines with your actual motor driver / ROS publisher / serial command.
+Physical actions are routed through RobotRuntime and RobotBackend so hardware,
+simulation, ROS, and MCP adapters share one contract.
 """
 
 from __future__ import annotations
@@ -27,7 +27,22 @@ class RobotTools:
         self.actions_taken.clear()
 
     def _record(self, action_type: str, **kwargs):
-        self.actions_taken.append({"type": action_type, "time": time.time(), **kwargs})
+        action = {"type": action_type, "time": time.time(), **kwargs}
+        self.actions_taken.append(action)
+        runtime = getattr(self._agent, "runtime", None)
+        if runtime is not None:
+            runtime.record_tool(action)
+        return action
+
+    def _record_result(self, action: dict, result):
+        runtime = getattr(self._agent, "runtime", None)
+        if runtime is not None:
+            runtime.record_tool(action, result)
+
+    @property
+    def _backend(self):
+        runtime = getattr(self._agent, "runtime", None)
+        return runtime.backend if runtime is not None else None
 
     # ── Terminal ───────────────────────────────────────────────────────────
 
@@ -37,9 +52,39 @@ class RobotTools:
         Args:
             summary: One sentence describing what was accomplished.
         """
-        self._record("done", summary=summary)
+        action = self._record("done", summary=summary)
+        runtime = getattr(self._agent, "runtime", None)
+        if runtime is not None:
+            runtime.finish_task(summary)
         print(f"[done] {summary}")
         return "Task marked complete."
+
+    def set_plan(self, goal: str, steps: str) -> str:
+        """Set or update your current task plan.
+
+        Args:
+            goal: The current operator goal in one sentence.
+            steps: Newline-separated plan steps. Keep each step concrete and observable.
+        """
+        runtime = getattr(self._agent, "runtime", None)
+        if runtime is not None:
+            runtime.set_plan(goal, steps)
+        parsed = [line.strip() for line in steps.splitlines() if line.strip()]
+        self._record("plan", goal=goal, steps=parsed)
+        print(f"[plan] {goal} | {len(parsed)} steps")
+        return f"Plan updated with {len(parsed)} steps."
+
+    def mark_step(self, step: str) -> str:
+        """Mark one plan step as active.
+
+        Args:
+            step: Step id or exact label to mark active.
+        """
+        runtime = getattr(self._agent, "runtime", None)
+        if runtime is not None:
+            runtime.mark_step(step)
+        self._record("step", step=step, status="active")
+        return f"Active step: {step}"
 
     # ── Communication ──────────────────────────────────────────────────────
 
@@ -66,11 +111,24 @@ class RobotTools:
         VALID = {"forward", "backward", "left", "right", "stop"}
         if direction not in VALID:
             return f"Invalid direction. Use one of: {', '.join(sorted(VALID))}"
-        # --- hardware hook ---
-        # robot_hw.drive(direction, distance_m)
-        self._record("navigate", direction=direction, distance_m=distance_m)
+
+        backend = self._backend
+        if backend is not None:
+            result = backend.drive(direction, distance_m)
+            action = self._record(
+                "navigate",
+                direction=direction,
+                distance_m=distance_m,
+                backend=backend.name,
+                ok=result.ok,
+            )
+            self._record_result(action, result)
+            print(f"[navigate] {direction} {distance_m:.2f} m ({'ok' if result.ok else 'failed'})")
+            return result.message
+
+        self._record("navigate", direction=direction, distance_m=distance_m, backend=None, ok=False)
         print(f"[navigate] {direction} {distance_m:.2f} m")
-        return f"Moved {direction} {distance_m:.2f} m."
+        return "No robot backend configured."
 
     def rotate(self, degrees: float) -> str:
         """Rotate the robot in place.
@@ -78,11 +136,17 @@ class RobotTools:
         Args:
             degrees: Degrees to rotate. Positive = clockwise, negative = counter-clockwise.
         """
-        # --- hardware hook ---
-        # robot_hw.rotate(degrees)
-        self._record("rotate", degrees=degrees)
+        backend = self._backend
+        if backend is not None:
+            result = backend.rotate(degrees)
+            action = self._record("rotate", degrees=degrees, backend=backend.name, ok=result.ok)
+            self._record_result(action, result)
+            print(f"[rotate] {degrees:+.0f}° ({'ok' if result.ok else 'failed'})")
+            return result.message
+
+        self._record("rotate", degrees=degrees, backend=None, ok=False)
         print(f"[rotate] {degrees:+.0f}°")
-        return f"Rotated {degrees:+.0f}°."
+        return "No robot backend configured."
 
     # ── Gestures ───────────────────────────────────────────────────────────
 
@@ -98,16 +162,16 @@ class RobotTools:
                 'high five'   — raise hand for high five
                 'hands up'    — both hands raised
         """
-        hw = getattr(self._agent, "_hardware", None)
-        if hw is not None:
-            ok = hw.gesture(gesture)
-            self._record("wave", gesture=gesture, hardware=True)
+        backend = self._backend
+        if backend is not None:
+            result = backend.gesture(gesture)
+            action = self._record("wave", gesture=gesture, backend=backend.name, ok=result.ok)
+            self._record_result(action, result)
             print(f"[wave] {gesture}")
-            return f"Gesture '{gesture}' executed." if ok else f"Gesture '{gesture}' failed."
-        # No hardware — stub
-        self._record("wave", gesture=gesture, hardware=False)
-        print(f"[wave] {gesture} (stub — no hardware)")
-        return f"Wave gesture '{gesture}' (no hardware connected)."
+            return result.message
+        self._record("wave", gesture=gesture, backend=None, ok=False)
+        print(f"[wave] {gesture} (no backend)")
+        return "No robot backend configured."
 
     # ── Manipulation ───────────────────────────────────────────────────────
 
@@ -120,11 +184,16 @@ class RobotTools:
         VALID = {"open", "close", "grab", "release"}
         if action not in VALID:
             return f"Invalid action. Use one of: {', '.join(sorted(VALID))}"
-        # --- hardware hook ---
-        # robot_hw.gripper(action)
-        self._record("gripper", action=action)
+        backend = self._backend
+        if backend is not None:
+            result = backend.gripper(action)
+            record = self._record("gripper", action=action, backend=backend.name, ok=result.ok)
+            self._record_result(record, result)
+            print(f"[gripper] {action}")
+            return result.message
+        self._record("gripper", action=action, backend=None, ok=False)
         print(f"[gripper] {action}")
-        return f"Gripper: {action}."
+        return "No robot backend configured."
 
     # ── Vision ─────────────────────────────────────────────────────────────
 
@@ -181,6 +250,9 @@ class RobotTools:
         Args:
             message: Status message or question for the operator.
         """
+        runtime = getattr(self._agent, "runtime", None)
+        if runtime is not None:
+            runtime.events.append("intent.status", "agent", message=message)
         self._record("status", message=message)
         print(f"[status] {message}")
         return "Status logged."
@@ -191,6 +263,8 @@ class RobotTools:
         """Return all tool callables for litert_lm registration."""
         return [
             self.done,
+            self.set_plan,
+            self.mark_step,
             self.speak,
             self.wave,
             self.navigate,

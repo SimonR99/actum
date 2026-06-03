@@ -47,7 +47,7 @@ def attach_server(agent: RobotAgent, app: FastAPI):
 
     @app.get("/")
     async def dashboard():
-      return HTMLResponse(_load_dashboard_html())
+        return HTMLResponse(_load_dashboard_html())
 
     @app.post("/command")
     async def command(body: dict):
@@ -60,10 +60,20 @@ def attach_server(agent: RobotAgent, app: FastAPI):
     @app.get("/settings")
     async def settings_get():
         return {
-        "name": agent.get_name(),
+            "name": agent.get_name(),
             "mode": agent.get_mode(),
-            "hardware_connected": agent._hardware is not None,
+            "backend": agent.runtime.backend.name,
+            "hardware_connected": agent.runtime.backend.connected,
+            "state": agent.runtime.snapshot(),
         }
+
+    @app.get("/capabilities")
+    async def capabilities_get():
+        return {"capabilities": agent.runtime.capabilities.list()}
+
+    @app.get("/state")
+    async def state_get():
+        return agent.runtime.snapshot()
 
     @app.post("/settings/mode")
     async def settings_mode(body: dict):
@@ -75,7 +85,8 @@ def attach_server(agent: RobotAgent, app: FastAPI):
             {
                 "ok": ok,
                 "mode": agent.get_mode(),
-                "hardware_connected": agent._hardware is not None,
+                "backend": agent.runtime.backend.name,
+                "hardware_connected": agent.runtime.backend.connected,
                 "message": message,
             },
             status_code=status,
@@ -89,12 +100,14 @@ def attach_server(agent: RobotAgent, app: FastAPI):
 
         # Send current state on connect
         await ws.send_text(json.dumps({"type": "memory", "data": agent.memory}))
+        await ws.send_text(json.dumps({"type": "state", "data": agent.runtime.snapshot()}))
         await ws.send_text(
             json.dumps(
                 {
                     "type": "settings",
                     "mode": agent.get_mode(),
-                    "hardware_connected": agent._hardware is not None,
+                    "backend": agent.runtime.backend.name,
+                    "hardware_connected": agent.runtime.backend.connected,
                 }
             )
         )
@@ -112,6 +125,7 @@ def attach_server(agent: RobotAgent, app: FastAPI):
                 if payload is not None:
                     await ws.send_text(json.dumps({"type": "turn", "actions": payload.get("actions", [])}))
                     await ws.send_text(json.dumps({"type": "memory", "data": agent.memory}))
+                    await ws.send_text(json.dumps({"type": "state", "data": agent.runtime.snapshot()}))
 
                 frame = agent.capture_frame()
                 if frame:

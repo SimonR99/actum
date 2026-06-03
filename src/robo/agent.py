@@ -18,6 +18,7 @@ With monitoring dashboard:
 from __future__ import annotations
 
 import asyncio
+import glob
 import json
 import os
 import sys
@@ -25,12 +26,17 @@ import time
 import threading
 from pathlib import Path
 
-import litert_lm
 import numpy as np
 
 from robo import tts as tts_module
+from robo.runtime import RobotRuntime
 from robo.tools import RobotTools
 from robo.perception import AudioCapture, open_camera, capture_jpeg
+
+try:
+    import litert_lm
+except ImportError:
+    litert_lm = None
 
 
 # ── Model config ───────────────────────────────────────────────────────────────
@@ -43,11 +49,12 @@ You are {robot_name}, an autonomous robot agent. You have a camera, microphone, 
 wheels, and a gripper. You perceive the world through your sensors and act through your tools.
 
 When you receive input (a voice command, a camera frame, or a scheduled event):
-1. Think step-by-step about what is needed.
+1. Call set_plan() for non-trivial tasks so the operator can see your intent.
 2. Use look() to observe your surroundings before navigating or picking objects up.
 3. Chain tool calls in sequence to accomplish the goal.
-4. Use remember() to store facts you will need in future turns.
-5. Always finish by calling done() with a one-sentence summary.
+4. Use mark_step() as you move through the plan.
+5. Use remember() to store facts you will need in future turns.
+6. Always finish by calling done() with a one-sentence summary.
 
 Be concise when speaking (1-2 sentences). Prefer action over explanation. \
 If you are uncertain, call report_status() to communicate your reasoning."""
@@ -66,7 +73,7 @@ class RobotAgent:
         self.conversation = None
         self.tts_backend: tts_module.TTSBackend | None = None
         self.tools: RobotTools | None = None
-        self._hardware = None  # UnitreeG1 instance, if hardware.enabled
+        self.runtime = RobotRuntime(self.config, self.get_name())
 
         # Per-turn state (reset at the start of each process_event call)
         self._pending_speech: list[str] = []
@@ -85,6 +92,12 @@ class RobotAgent:
 
     def load_models(self):
         """Load LLM + TTS and wire up tools. Blocking — run via executor."""
+        if litert_lm is None:
+            raise RuntimeError(
+                "litert-lm is not installed. Install project dependencies with "
+                "`pip install -e .` before starting the agent."
+            )
+
         model_path = _resolve_model_path()
 
         print(f"Loading LLM from {model_path}…")
@@ -106,7 +119,7 @@ class RobotAgent:
         self.conversation.__enter__()
 
         self._camera = open_camera()
-        self._init_hardware()
+        self._init_backend()
         print("Robot agent ready.")
 
     def shutdown(self):
@@ -116,34 +129,14 @@ class RobotAgent:
             self.engine.__exit__(None, None, None)
         if self._camera:
             self._camera.release()
+        self.runtime.close()
 
-    def _init_hardware(self):
-        """Initialise optional hardware backend from config.json."""
-        hw_cfg = self.config.get("hardware", {})
-        if not hw_cfg.get("enabled", False):
-            return
-
-        hw_type = (hw_cfg.get("type") or "").lower()
-        if hw_type != "unitree_g1":
-            print(f"[hardware] Unsupported hardware type: {hw_type!r}")
-            return
-
-        try:
-            from robo.hardware.unitree import UnitreeG1
-        except Exception as exc:
-            print(f"[hardware] Failed to import Unitree backend: {exc}")
-            return
-
-        backend = UnitreeG1(
-            network_interface=hw_cfg.get("network_interface", "eth0"),
-            speaker_id=int(hw_cfg.get("speaker_id", 0)),
-            volume=int(hw_cfg.get("volume", 80)),
-        )
-        if backend.connect():
-            self._hardware = backend
-            print("[hardware] Unitree G1 backend connected")
+    def _init_backend(self):
+        """Initialise the configured robot backend."""
+        if self.runtime.connect():
+            print(f"[backend] {self.runtime.backend.name} connected")
         else:
-            print("[hardware] Unitree G1 backend unavailable; running without hardware")
+            print(f"[backend] {self.runtime.backend.name} unavailable")
 
     # ── Perception ─────────────────────────────────────────────────────────
 
@@ -226,8 +219,10 @@ class RobotAgent:
             )
         elif src == "voice":
             instruction = (
-                "The user spoke to you. Understand their request and accomplish it "
-                "using your tools. Call done() when finished."
+                "The user spoke to you. First call speak() to respond verbally — "
+                "acknowledge what they said and give your answer or status. "
+                "Then use any other tools needed to accomplish the request. "
+                "Always call done() last."
             )
         elif src == "vision":
             instruction = (
@@ -258,22 +253,24 @@ class RobotAgent:
 
         mode = self.get_mode()
         if mode == "unitree":
-            hw = getattr(self, "_hardware", None)
-            if hw is not None:
-                ok = await asyncio.get_event_loop().run_in_executor(None, lambda: hw.speak(text))
-                if ok:
+            if self.runtime.backend.name == "unitree_g1" and self.runtime.backend.connected:
+                result = await asyncio.get_event_loop().run_in_executor(None, lambda: self.runtime.backend.speak(text))
+                if result.ok:
                     return
-                print("[tts] unitree speak failed; falling back to local")
+                print(f"[tts] unitree speak failed; falling back to local ({result.message})")
             else:
-                print("[tts] unitree mode selected but hardware not connected; falling back to local")
+                print("[tts] unitree mode selected but Unitree backend is not connected; falling back to local")
 
         if not self.tts_backend:
+            print("[tts] no backend loaded — skipping speech")
             return
 
+        print(f"[tts] generating: {text!r}")
         try:
             pcm = await asyncio.get_event_loop().run_in_executor(
                 None, lambda: self.tts_backend.generate(text)
             )
+            print(f"[tts] playing {len(pcm) / self.tts_backend.sample_rate:.2f}s of audio")
             await self._play_audio(pcm)
         except Exception as e:
             print(f"[tts] error: {e}")
@@ -286,14 +283,17 @@ class RobotAgent:
             await asyncio.get_event_loop().run_in_executor(
                 None, lambda: sd.play(pcm, samplerate=sr, device=device, blocking=True)
             )
-        except Exception:
+        except Exception as e:
+            print(f"[tts] sounddevice playback failed ({e}), trying aplay/afplay fallback")
             import soundfile as sf
             import tempfile
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                 path = f.name
             sf.write(path, pcm, sr)
-            cmd = f"aplay '{path}' 2>/dev/null || afplay '{path}' 2>/dev/null"
-            await asyncio.get_event_loop().run_in_executor(None, lambda: os.system(cmd))
+            cmd = f"aplay '{path}' || afplay '{path}'"
+            ret = await asyncio.get_event_loop().run_in_executor(None, lambda: os.system(cmd))
+            if ret != 0:
+                print(f"[tts] fallback playback also failed (exit {ret})")
 
     # ── Monitoring ─────────────────────────────────────────────────────────
 
@@ -341,7 +341,7 @@ class RobotAgent:
             except Exception as exc:
                 return False, f"Mode changed in memory but failed to save config: {exc}"
 
-        if mode == "unitree" and self._hardware is None:
+        if mode == "unitree" and not (self.runtime.backend.name == "unitree_g1" and self.runtime.backend.connected):
             return True, "Mode set to unitree, but hardware is not connected. Local fallback will be used."
 
         return True, f"Mode set to {mode}."
@@ -352,7 +352,8 @@ class RobotAgent:
 def _resolve_model_path() -> str:
     path = os.environ.get("MODEL_PATH", "")
     if path:
-        return path
+        expanded = sorted(glob.glob(os.path.expanduser(path)))
+        return expanded[0] if expanded else path
     from huggingface_hub import hf_hub_download
     print(f"Downloading {HF_REPO}/{HF_FILENAME} (first run only)…")
     return hf_hub_download(repo_id=HF_REPO, filename=HF_FILENAME)
@@ -368,6 +369,20 @@ def _load_config(config_path: str | Path | None = None) -> dict:
     default = {
         "name": "spacewalker",
         "tts": "local",
+        "robot": {
+            "backend": "fake",
+            "fake": {},
+            "unitree_g1": {
+                "network_interface": "eth0",
+                "speaker_id": 0,
+                "volume": 80,
+            },
+            "lekiwi": {
+                "remote_ip": "127.0.0.1",
+                "port": 5555,
+                "id": "lekiwi",
+            },
+        },
         "hardware": {
             "enabled": False,
             "type": "unitree_g1",
@@ -392,8 +407,12 @@ def _load_config(config_path: str | Path | None = None) -> dict:
     if isinstance(raw, dict):
         cfg["name"] = raw.get("name", cfg["name"])
         cfg["tts"] = raw.get("tts", cfg["tts"])
+        robot = raw.get("robot", {}) if isinstance(raw.get("robot"), dict) else {}
+        cfg["robot"] = {**default["robot"], **robot}
         hw = raw.get("hardware", {}) if isinstance(raw.get("hardware"), dict) else {}
         cfg["hardware"] = {**default["hardware"], **hw}
+        if "robot" not in raw and cfg["hardware"].get("enabled"):
+            cfg["robot"]["backend"] = ""
     return cfg
 
 

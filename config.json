@@ -3,9 +3,24 @@
   "name": "spacewalker",
   "tts": "local",
   "_tts_options": "local (Kokoro via sounddevice) | unitree (robot's built-in speaker)",
+  "robot": {
+    "backend": "fake",
+    "_backend_options": "fake | unitree_g1 | lekiwi",
+    "fake": {},
+    "unitree_g1": {
+      "network_interface": "eth0",
+      "speaker_id": 0,
+      "volume": 80
+    },
+    "lekiwi": {
+      "remote_ip": "127.0.0.1",
+      "port": 5555,
+      "id": "lekiwi"
+    }
+  },
   "hardware": {
     "enabled": false,
-    "_enabled_comment": "Set to true to connect to the physical Unitree G1",
+    "_enabled_comment": "Deprecated. Use robot.backend instead.",
     "type": "unitree_g1",
     "network_interface": "eth0",
     "_network_interface_comment": "Run `ip link` to find the interface connected to the robot",
