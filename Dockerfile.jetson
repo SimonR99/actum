@@ -1,6 +1,6 @@
-# Jetson-optimized Dockerfile for vlm-g1 robot agent
+# Jetson-optimized Dockerfile for Actum robot agent
 # For Jetson Orin (aarch64) with JetPack 6.x
-# Build: docker build -f Dockerfile.jetson -t vlm-g1:jetson .
+# Build: docker build -f Dockerfile.jetson -t actum:jetson .
 # 
 # Note: This is pre-configured for Jetson's OpenCL-based CUDA.
 # No need for separate NVIDIA base image; use nvcr.io/nvidia/l4t-base
@@ -100,4 +100,4 @@ ENV CUDA_VISIBLE_DEVICES=0 \
 
 EXPOSE 8000
 
-CMD ["robo-server"]
+CMD ["actum-server"]

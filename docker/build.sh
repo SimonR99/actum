@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build Docker image for vlm-g1-agent
+# Build Docker image for Actum
 # Usage: ./docker/build.sh
 # Or:    ./docker/build.sh --no-cache
 
@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "Building vlm-g1:latest Docker image from $PROJECT_ROOT..."
+echo "Building actum:latest Docker image from $PROJECT_ROOT..."
 echo ""
 
 cd "$PROJECT_ROOT"
@@ -28,12 +28,12 @@ fi
 
 docker build \
     $BUILD_ARGS \
-    -t vlm-g1:latest \
+    -t actum:latest \
     -f Dockerfile \
     .
 
 echo ""
-echo "✓ Build complete: vlm-g1:latest"
+echo "✓ Build complete: actum:latest"
 echo ""
 echo "Next steps:"
 echo "  - Run with GPU support:  docker compose up"

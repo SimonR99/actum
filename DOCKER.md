@@ -11,13 +11,13 @@ Docker images are for local development, dashboard operation, and Jetson deploym
 or:
 
 ```bash
-docker build -t vlm-g1:latest .
+docker build -t actum:latest .
 ```
 
 Jetson:
 
 ```bash
-docker build -f Dockerfile.jetson -t vlm-g1:jetson .
+docker build -f Dockerfile.jetson -t actum:jetson .
 ```
 
 ## Run
@@ -80,11 +80,11 @@ pip install "lerobot[lekiwi]"
 
 ## Model Cache
 
-Hugging Face model downloads are cached in the `vlm-g1-huggingface` Docker volume.
+Hugging Face model downloads are cached in the `actum-huggingface` Docker volume.
 
 ```bash
-docker volume ls | grep vlm-g1
-docker volume rm vlm-g1-huggingface
+docker volume ls | grep actum
+docker volume rm actum-huggingface
 ```
 
 ## Troubleshooting
@@ -98,12 +98,12 @@ docker run --rm --gpus all nvidia/cuda:12.4.1-runtime nvidia-smi
 Audio:
 
 ```bash
-docker exec vlm-g1-agent arecord -L
-docker exec vlm-g1-agent speaker-test -t wav -c 2 -l 1
+docker exec actum-agent arecord -L
+docker exec actum-agent speaker-test -t wav -c 2 -l 1
 ```
 
 Camera:
 
 ```bash
-docker exec vlm-g1-agent ls /dev/video*
+docker exec actum-agent ls /dev/video*
 ```

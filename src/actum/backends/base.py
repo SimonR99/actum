@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC
 from typing import Any
 
-from robo.core.schema import ActionResult, RobotState, now
+from actum.core.schema import ActionResult, RobotState, now
 
 
 class RobotBackend(ABC):

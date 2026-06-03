@@ -1,8 +1,8 @@
-version: '3.8'
+name: actum
 
 services:
   # ── Main robot agent service (headless or web server) ──────────────────────
-  robo:
+  actum:
     build:
       context: .
       dockerfile: Dockerfile
@@ -10,8 +10,8 @@ services:
         CUDA_VERSION: "12.4.1"
         UBUNTU_VERSION: "22.04"
     
-    image: vlm-g1:latest
-    container_name: vlm-g1-agent
+    image: actum:latest
+    container_name: actum-agent
     
     # GPU support (requires nvidia-docker or Docker 20.10+)
     deploy:
@@ -29,9 +29,9 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       # Audio device (adjust if needed: hw:1,0 for different card)
-      - ROBO_AUDIO_DEVICE=hw:0,0
+      - ACTUM_AUDIO_DEVICE=hw:0,0
       # Camera mode: auto, csi, usb, or device index
-      - ROBO_CAMERA=usb
+      - ACTUM_CAMERA=usb
     
     # Volumes for persistence + hardware access
     volumes:
@@ -39,7 +39,7 @@ services:
       - ./config.json:/workspace/config.json:ro
       
       # Model cache (persistent across runs)
-      - huggingface-cache:/root/.cache/huggingface
+      - actum-huggingface:/root/.cache/huggingface
       
       # Agent memory + logs
       - ./logs:/workspace/logs
@@ -72,5 +72,6 @@ services:
 
 # Named volume for model caching (shared across runs)
 volumes:
-  huggingface-cache:
+  actum-huggingface:
+    name: actum-huggingface
     driver: local

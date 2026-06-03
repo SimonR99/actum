@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Open interactive shell in vlm-g1 container
+# Open interactive shell in a Actum container
 # Useful for debugging, running commands, or manual testing
 # Usage: ./docker/shell.sh
 
@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "Opening interactive shell in vlm-g1 container..."
+echo "Opening interactive shell in Actum container..."
 echo ""
 
 ENV_ARGS=()
@@ -28,13 +28,13 @@ mkdir -p "$PROJECT_ROOT/logs"
 
 docker run --rm -it \
     --gpus all \
-    --name vlm-g1-shell \
+    --name actum-shell \
     "${ENV_ARGS[@]}" \
     -v "$PROJECT_ROOT/config.json:/workspace/config.json" \
-    -v vlm-g1-huggingface:/root/.cache/huggingface \
+    -v actum-huggingface:/root/.cache/huggingface \
     -v "$PROJECT_ROOT/logs:/workspace/logs" \
     "${DEVICE_ARGS[@]}" \
-    vlm-g1:latest \
+    actum:latest \
     /bin/bash
 
 echo ""

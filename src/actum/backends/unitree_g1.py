@@ -11,8 +11,8 @@ import time
 from math import radians
 from typing import Any
 
-from robo.backends.base import RobotBackend
-from robo.core.schema import RobotState, now
+from actum.backends.base import RobotBackend
+from actum.core.schema import RobotState, now
 
 
 GESTURES: list[str] = []

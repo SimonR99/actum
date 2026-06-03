@@ -6,7 +6,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from robo.core.schema import PlanStep, now
+from actum.core.schema import PlanStep, now
 
 
 _LIST_PREFIX = re.compile(r"^\s*(?:[-*]|\d+[.)])\s*")

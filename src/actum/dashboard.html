@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Actum</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f4f6f8;
+  --surface: rgba(255,255,255,.86);
+  --surface-strong: #ffffff;
+  --line: rgba(26,35,48,.13);
+  --line-strong: rgba(26,35,48,.22);
+  --ink: #15181d;
+  --muted: #69707c;
+  --soft: #eef1f5;
+  --blue: #1677ff;
+  --blue-soft: #e8f2ff;
+  --green: #25a85a;
+  --green-soft: #e7f7ed;
+  --amber: #c97d10;
+  --amber-soft: #fff3db;
+  --red: #d33f32;
+  --red-soft: #fff0ee;
+  --violet: #6d5dfc;
+  --shadow: 0 14px 40px rgba(24,31,43,.10);
+  --radius: 8px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  min-height: 100vh;
+  color: var(--ink);
+  background: linear-gradient(180deg, #fff 0%, var(--page) 54%, #e9edf2 100%);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0;
+}
+button, input, select { font: inherit; letter-spacing: 0; }
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  min-height: 68px;
+  display: grid;
+  grid-template-columns: minmax(240px, 360px) minmax(320px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255,255,255,.78);
+  backdrop-filter: blur(20px) saturate(150%);
+}
+.identity {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+}
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #aeb5c1;
+}
+.dot.live {
+  background: var(--green);
+  box-shadow: 0 0 0 5px rgba(37,168,90,.14);
+}
+.title {
+  font-size: 16px;
+  line-height: 21px;
+  font-weight: 760;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.subtitle {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.triggerBar {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+}
+#commandText {
+  width: 100%;
+  height: 38px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: #fafbfc;
+  color: var(--ink);
+  padding: 0 11px;
+  outline: none;
+}
+#commandText:focus {
+  border-color: rgba(22,119,255,.55);
+  box-shadow: 0 0 0 4px rgba(22,119,255,.10);
+}
+.btn {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+  color: var(--ink);
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 740;
+  cursor: pointer;
+}
+.btn.primary {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+.chips {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.chip {
+  min-height: 26px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255,255,255,.66);
+  color: var(--muted);
+  padding: 0 9px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.chip.ok { color: #146d39; background: var(--green-soft); border-color: rgba(37,168,90,.28); }
+.chip.warn { color: #8f5608; background: var(--amber-soft); border-color: rgba(201,125,16,.30); }
+.workspace {
+  min-height: calc(100vh - 68px);
+  display: grid;
+  grid-template-columns: minmax(300px, 370px) minmax(430px, 1fr) minmax(330px, 410px);
+  grid-template-rows: minmax(390px, .95fr) minmax(340px, .9fr);
+  grid-template-areas:
+    "intent perception settings"
+    "behavior graph context";
+  gap: 14px;
+  padding: 16px;
+}
+.panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px) saturate(145%);
+}
+.panelHeader {
+  min-height: 43px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.panelTitle {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 780;
+  color: #303640;
+  text-transform: uppercase;
+}
+.panelMeta {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.scroll { min-height: 0; overflow: auto; }
+.empty {
+  color: #9aa1ac;
+  font-size: 13px;
+  line-height: 18px;
+  padding: 10px;
+}
+.intentPanel { grid-area: intent; }
+.perceptionPanel { grid-area: perception; }
+.settingsPanel { grid-area: settings; }
+.behaviorPanel { grid-area: behavior; }
+.graphPanel { grid-area: graph; }
+.contextPanel { grid-area: context; }
+.goalBox {
+  margin: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+}
+.label {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 680;
+  text-transform: uppercase;
+}
+.goalText {
+  margin-top: 5px;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 760;
+  overflow-wrap: anywhere;
+}
+.list {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+.step, .node, .event, .mapItem, .job, .toolItem, .settingGroup {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,.62);
+  padding: 9px 10px;
+  min-width: 0;
+}
+.step {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 8px;
+}
+.index {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #e8ebf0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.step.active, .node.active { border-color: rgba(22,119,255,.35); background: var(--blue-soft); }
+.step.done, .node.done { border-color: rgba(37,168,90,.30); background: var(--green-soft); }
+.step.blocked, .node.blocked, .node.failed { border-color: rgba(211,63,50,.30); background: var(--red-soft); }
+.step.active .index { background: var(--blue); color: white; }
+.step.done .index { background: var(--green); color: white; }
+.step.blocked .index { background: var(--red); color: white; }
+.mainText {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.subText {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 17px;
+  overflow-wrap: anywhere;
+}
+.cameraGrid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.25fr) minmax(220px, .75fr);
+  gap: 12px;
+  padding: 12px;
+  flex: 1;
+  min-height: 0;
+}
+.cameraWrap {
+  position: relative;
+  min-height: 240px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #101318;
+}
+#camera {
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  display: block;
+  object-fit: contain;
+}
+#cameraPh {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(255,255,255,.58);
+  font-size: 13px;
+}
+.bodyBox {
+  display: grid;
+  gap: 8px;
+}
+.kv {
+  display: grid;
+  grid-template-columns: minmax(82px, .35fr) minmax(0, 1fr);
+  gap: 8px;
+  font-size: 12px;
+  line-height: 17px;
+}
+.kv span:first-child { color: var(--muted); }
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+}
+.metric {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+  padding: 9px 10px;
+}
+.metricValue {
+  font-size: 18px;
+  line-height: 23px;
+  font-weight: 780;
+}
+.metricLabel {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 15px;
+}
+.graphNode {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+.graphDot {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #e7eaf0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.graphNode.ok .graphDot { background: var(--green); color: white; }
+.graphNode.fail .graphDot { background: var(--red); color: white; }
+.event {
+  border-left: 3px solid var(--violet);
+  font-size: 12px;
+  line-height: 17px;
+}
+.event.tool { border-left-color: var(--blue); }
+.event.intent { border-left-color: var(--green); }
+.event.companion { border-left-color: var(--amber); }
+.event.map, .event.body { border-left-color: var(--violet); }
+.settingsBody {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+.fieldGrid {
+  display: grid;
+  gap: 8px;
+}
+.fieldGrid input, .fieldGrid select {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: #fafbfc;
+  color: var(--ink);
+  padding: 0 9px;
+}
+.splitFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.backendFields {
+  display: none;
+  gap: 8px;
+}
+.backendFields.active {
+  display: grid;
+}
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+.checkRow input { accent-color: var(--blue); }
+.toolList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.toolItem {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  line-height: 16px;
+}
+.toolItem input { accent-color: var(--blue); }
+#toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 30;
+  max-width: min(420px, calc(100vw - 32px));
+  opacity: 0;
+  transform: translateY(7px);
+  transition: .18s ease;
+  border-radius: var(--radius);
+  background: rgba(24,27,33,.92);
+  color: white;
+  padding: 10px 12px;
+  font-size: 13px;
+  pointer-events: none;
+}
+#toast.show { opacity: 1; transform: translateY(0); }
+@media (max-width: 1180px) {
+  .topbar { grid-template-columns: 1fr; }
+  .chips { justify-content: flex-start; }
+  .workspace {
+    grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+    grid-template-rows: auto;
+    grid-template-areas:
+      "intent perception"
+      "behavior settings"
+      "graph context";
+  }
+}
+@media (max-width: 760px) {
+  .triggerBar { grid-template-columns: 1fr; }
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "intent"
+      "perception"
+      "behavior"
+      "settings"
+      "graph"
+      "context";
+  }
+  .cameraGrid, .kv { grid-template-columns: 1fr; }
+  .toolList { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="identity">
+    <div id="dot" class="dot"></div>
+    <div>
+      <div id="robotTitle" class="title">Actum</div>
+      <div id="intentLine" class="subtitle">Waiting for trigger</div>
+    </div>
+  </div>
+  <div class="triggerBar">
+    <input id="commandText" placeholder="Command">
+    <button class="btn primary" onclick="sendTrigger('chat')">Chat</button>
+    <button class="btn" onclick="sendTrigger('language')">Language</button>
+    <button class="btn" onclick="sendTrigger('vision')">Vision</button>
+  </div>
+  <div class="chips">
+    <span id="wsChip" class="chip warn">ws offline</span>
+    <span id="camChip" class="chip warn">camera waiting</span>
+    <span id="backendChip" class="chip">backend -</span>
+    <span id="modelChip" class="chip">model -</span>
+  </div>
+</header>
+
+<main class="workspace">
+  <section class="panel intentPanel">
+    <div class="panelHeader">
+      <div class="panelTitle">Intent</div>
+      <div id="intentState" class="panelMeta">idle</div>
+    </div>
+    <div class="goalBox">
+      <div class="label">Goal</div>
+      <div id="goalText" class="goalText">No active task</div>
+    </div>
+    <div id="planBody" class="list scroll"></div>
+  </section>
+
+  <section class="panel perceptionPanel">
+    <div class="panelHeader">
+      <div class="panelTitle">Perception</div>
+      <div id="visionMeta" class="panelMeta">waiting</div>
+    </div>
+    <div class="cameraGrid">
+      <div class="cameraWrap">
+        <img id="camera" alt="Camera feed">
+        <div id="cameraPh">No camera frame</div>
+      </div>
+      <div class="bodyBox scroll">
+        <div class="settingGroup">
+          <div class="label">Body</div>
+          <div id="bodySummary" class="mainText">Unknown</div>
+          <div id="bodyDetails" class="subText"></div>
+        </div>
+        <div class="settingGroup">
+          <div class="label">Recent Perception</div>
+          <div id="sawList"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel settingsPanel">
+    <div class="panelHeader">
+      <div class="panelTitle">Settings</div>
+      <div id="settingsMeta" class="panelMeta">runtime</div>
+    </div>
+    <div class="settingsBody scroll">
+      <div class="settingGroup fieldGrid">
+        <div class="label">Robot</div>
+        <input id="robotNameInput" placeholder="Name">
+        <select id="robotBackendSelect" onchange="selectRobotBackend()">
+          <option value="laptop">Laptop</option>
+          <option value="fake">Fake</option>
+          <option value="unitree_g1">Unitree G1</option>
+          <option value="lekiwi">LeKiwi</option>
+        </select>
+        <div id="laptopFields" class="backendFields">
+          <label class="checkRow"><input id="laptopWebcam" type="checkbox"> Webcam</label>
+          <label class="checkRow"><input id="laptopMicrophone" type="checkbox"> Microphone</label>
+          <label class="checkRow"><input id="laptopSpeaker" type="checkbox"> Speaker</label>
+        </div>
+        <div id="unitreeFields" class="backendFields">
+          <input id="unitreeInterface" placeholder="Network interface">
+          <div class="splitFields">
+            <input id="unitreeSpeakerId" type="number" min="0" max="1" placeholder="Speaker ID">
+            <input id="unitreeVolume" type="number" min="0" max="100" placeholder="Volume">
+          </div>
+        </div>
+        <div id="lekiwiFields" class="backendFields">
+          <input id="lekiwiIp" placeholder="Remote IP">
+          <div class="splitFields">
+            <input id="lekiwiPort" type="number" min="1" max="65535" placeholder="Port">
+            <input id="lekiwiId" placeholder="ID">
+          </div>
+        </div>
+        <label class="checkRow"><input id="persistRobotSettings" type="checkbox" checked> Save robot</label>
+        <button class="btn primary" onclick="applyRobotSettings()">Apply Robot</button>
+      </div>
+      <div class="settingGroup fieldGrid">
+        <div class="label">Model</div>
+        <select id="providerSelect" onchange="selectProvider()">
+          <option value="local">Local</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+        </select>
+        <input id="modelInput" placeholder="Model">
+        <input id="apiKeyInput" type="password" placeholder="API key">
+        <label class="checkRow"><input id="providerEnabled" type="checkbox"> Enabled</label>
+        <label class="checkRow"><input id="persistSettings" type="checkbox"> Save settings</label>
+        <label class="checkRow"><input id="persistSecret" type="checkbox"> Save key</label>
+        <button class="btn primary" onclick="applyModelSettings()">Apply Model</button>
+      </div>
+      <div class="settingGroup">
+        <div class="label">Tools</div>
+        <div id="toolList" class="toolList"></div>
+      </div>
+      <div class="settingGroup fieldGrid">
+        <div class="label">Cron</div>
+        <input id="cronName" placeholder="Name">
+        <input id="cronSeconds" type="number" min="1" value="300">
+        <input id="cronInstruction" placeholder="Instruction">
+        <button class="btn" onclick="addCron()">Add Job</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel behaviorPanel">
+    <div class="panelHeader">
+      <div class="panelTitle">Behavior Tree</div>
+      <div id="behaviorMeta" class="panelMeta">0 ticks</div>
+    </div>
+    <div id="behaviorBody" class="list scroll"></div>
+  </section>
+
+  <section class="panel graphPanel">
+    <div class="panelHeader">
+      <div class="panelTitle">Tool Graph</div>
+      <div id="graphMeta" class="panelMeta">0 calls</div>
+    </div>
+    <div id="graphBody" class="list scroll"></div>
+  </section>
+
+  <section class="panel contextPanel">
+    <div class="panelHeader">
+      <div class="panelTitle">Map And Memory</div>
+      <div id="contextMeta" class="panelMeta">state</div>
+    </div>
+    <div class="metrics" id="metricGrid"></div>
+    <div id="mapBody" class="list scroll"></div>
+    <div class="panelHeader">
+      <div class="panelTitle">Timeline</div>
+      <div id="traceCount" class="panelMeta">0 events</div>
+    </div>
+    <div id="traceLog" class="list scroll"></div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const dot = document.getElementById('dot');
+const wsChip = document.getElementById('wsChip');
+const camChip = document.getElementById('camChip');
+const backendChip = document.getElementById('backendChip');
+const modelChip = document.getElementById('modelChip');
+const robotTitle = document.getElementById('robotTitle');
+const intentLine = document.getElementById('intentLine');
+const intentState = document.getElementById('intentState');
+const goalText = document.getElementById('goalText');
+const planBody = document.getElementById('planBody');
+const behaviorBody = document.getElementById('behaviorBody');
+const behaviorMeta = document.getElementById('behaviorMeta');
+const graphBody = document.getElementById('graphBody');
+const graphMeta = document.getElementById('graphMeta');
+const traceLog = document.getElementById('traceLog');
+const traceCount = document.getElementById('traceCount');
+const metricGrid = document.getElementById('metricGrid');
+const mapBody = document.getElementById('mapBody');
+const cam = document.getElementById('camera');
+const camPh = document.getElementById('cameraPh');
+const commandText = document.getElementById('commandText');
+const bodySummary = document.getElementById('bodySummary');
+const bodyDetails = document.getElementById('bodyDetails');
+const sawList = document.getElementById('sawList');
+const toolList = document.getElementById('toolList');
+const robotNameInput = document.getElementById('robotNameInput');
+const robotBackendSelect = document.getElementById('robotBackendSelect');
+const laptopWebcam = document.getElementById('laptopWebcam');
+const laptopMicrophone = document.getElementById('laptopMicrophone');
+const laptopSpeaker = document.getElementById('laptopSpeaker');
+const unitreeInterface = document.getElementById('unitreeInterface');
+const unitreeSpeakerId = document.getElementById('unitreeSpeakerId');
+const unitreeVolume = document.getElementById('unitreeVolume');
+const lekiwiIp = document.getElementById('lekiwiIp');
+const lekiwiPort = document.getElementById('lekiwiPort');
+const lekiwiId = document.getElementById('lekiwiId');
+const providerSelect = document.getElementById('providerSelect');
+const modelInput = document.getElementById('modelInput');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const providerEnabled = document.getElementById('providerEnabled');
+const toast = document.getElementById('toast');
+
+let lastState = null;
+let providers = {};
+let robotFieldsTouched = false;
+
+[
+  robotNameInput,
+  laptopWebcam,
+  laptopMicrophone,
+  laptopSpeaker,
+  unitreeInterface,
+  unitreeSpeakerId,
+  unitreeVolume,
+  lekiwiIp,
+  lekiwiPort,
+  lekiwiId,
+].forEach(el => {
+  el.addEventListener('input', () => { robotFieldsTouched = true; });
+  el.addEventListener('change', () => { robotFieldsTouched = true; });
+});
+
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+function short(value, max = 130) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
+function toastMsg(text) {
+  toast.textContent = text;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 1800);
+}
+
+async function sendTrigger(source) {
+  const text = commandText.value.trim();
+  if (!text && source !== 'vision') return;
+  const response = await fetch(`/trigger/${source}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, force: source !== 'vision', importance: source === 'vision' ? 0.6 : 1 })
+  });
+  const data = await response.json();
+  if (response.ok) {
+    toastMsg(`${data.queued} queued`);
+    if (source !== 'vision') commandText.value = '';
+  } else {
+    toastMsg(data.error || 'Trigger failed');
+  }
+}
+
+commandText.addEventListener('keydown', event => {
+  if (event.key === 'Enter') sendTrigger('chat');
+});
+
+function renderState(state) {
+  if (!state) return;
+  lastState = state;
+  const personality = state.personality || {};
+  const name = personality.name || state.robot_name || 'Actum';
+  const intent = state.intent || {};
+  const behavior = state.behavior || {};
+  const settings = state.settings || {};
+  const model = settings.models || {};
+  const activeProvider = model.active_provider || 'local';
+
+  robotTitle.textContent = name;
+  document.title = name;
+  goalText.textContent = intent.goal || behavior.goal || 'No active task';
+  intentLine.textContent = intent.goal || behavior.goal || 'Waiting for trigger';
+  intentState.textContent = intent.status || 'idle';
+  backendChip.textContent = `backend ${state.backend || '-'}`;
+  backendChip.className = `chip ${state.robot_state?.connected ? 'ok' : 'warn'}`;
+  modelChip.textContent = `model ${activeProvider}`;
+
+  renderPlan(intent.steps || []);
+  renderBehavior(behavior);
+  renderGraph(state.tool_graph || []);
+  renderMemoryAndMap(state);
+  renderBody(state.body || {});
+  renderRobotSettings(state);
+  renderSettings(settings);
+  renderTimeline(state.events || []);
+}
+
+function renderPlan(steps) {
+  planBody.innerHTML = steps.length ? steps.map((step, index) => `
+    <div class="step ${esc(step.status || 'pending')}">
+      <div class="index">${step.status === 'done' ? 'ok' : index + 1}</div>
+      <div>
+        <div class="mainText">${esc(step.label || step.id || '')}</div>
+        <div class="subText">${esc(step.status || 'pending')}</div>
+      </div>
+    </div>
+  `).join('') : '<div class="empty">Waiting for a plan</div>';
+}
+
+function renderBehavior(behavior) {
+  const nodes = behavior.nodes || [];
+  behaviorMeta.textContent = `${behavior.tick_count || 0} ticks`;
+  behaviorBody.innerHTML = nodes.length ? nodes.map(node => `
+    <div class="node ${esc(node.status || 'waiting')}">
+      <div class="mainText">${esc(node.label || node.id)}</div>
+      <div class="subText">${esc(node.kind || 'node')} · ${esc(node.status || 'waiting')}${node.detail ? ` · ${esc(node.detail)}` : ''}</div>
+    </div>
+  `).join('') : '<div class="empty">No behavior nodes</div>';
+}
+
+function renderGraph(nodes) {
+  graphMeta.textContent = `${nodes.length} call${nodes.length === 1 ? '' : 's'}`;
+  graphBody.innerHTML = nodes.length ? nodes.slice(-18).map((node, index) => {
+    const ok = node.result ? node.result.ok : null;
+    const cls = ok === true ? 'ok' : ok === false ? 'fail' : '';
+    const args = summarizeAction(node.action || {});
+    return `
+      <div class="graphNode ${cls}">
+        <div class="graphDot">${index + 1}</div>
+        <div class="node">
+          <div class="mainText">${esc(node.type || 'tool')}</div>
+          <div class="subText">${esc(node.result ? node.result.message : 'queued')}</div>
+          ${args ? `<div class="subText">${esc(args)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('') : '<div class="empty">No tool calls yet</div>';
+}
+
+function summarizeAction(action) {
+  const ignored = new Set(['type', 'time', '_node_id', 'ok', 'backend']);
+  return Object.entries(action)
+    .filter(([key, value]) => !ignored.has(key) && value !== '' && value !== null && value !== undefined)
+    .slice(0, 3)
+    .map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`)
+    .join(' · ');
+}
+
+function renderMemoryAndMap(state) {
+  const memory = state.memory || {};
+  const counts = memory.counts || {};
+  const map = state.map || {};
+  const observations = map.observations || [];
+  const cron = state.cron?.jobs || [];
+
+  metricGrid.innerHTML = [
+    ['Facts', counts.facts || 0],
+    ['Places', counts.places || 0],
+    ['Map', observations.length],
+    ['Cron', cron.length],
+  ].map(([label, value]) => `
+    <div class="metric"><div class="metricValue">${esc(value)}</div><div class="metricLabel">${esc(label)}</div></div>
+  `).join('');
+
+  const rows = [
+    ...observations.slice(-8).reverse().map(item => ({ kind: item.place || 'map', text: item.summary || '' })),
+    ...cron.slice(0, 5).map(job => ({ kind: `cron · ${job.name}`, text: `${Math.round(job.every_seconds)}s · ${job.instruction}` })),
+  ];
+  mapBody.innerHTML = rows.length ? rows.map(row => `
+    <div class="mapItem">
+      <div class="mainText">${esc(row.kind)}</div>
+      <div class="subText">${esc(row.text)}</div>
+    </div>
+  `).join('') : '<div class="empty">No map observations or jobs</div>';
+
+  const recent = memory.recent || [];
+  const seen = recent.filter(item => ['observation', 'spatial'].includes(item.kind)).slice(-5).reverse();
+  sawList.innerHTML = seen.length ? seen.map(item => `
+    <div class="mapItem">
+      <div class="mainText">${esc(item.kind)}</div>
+      <div class="subText">${esc(item.summary || '')}</div>
+    </div>
+  `).join('') : '<div class="empty">No observations yet</div>';
+}
+
+function renderBody(body) {
+  bodySummary.textContent = body.summary || 'Unknown';
+  const pose = body.base_pose || {};
+  const joints = body.joints || {};
+  bodyDetails.innerHTML = [
+    ['Posture', body.posture || 'unknown'],
+    ['Holding', body.holding || 'nothing'],
+    ['Contacts', (body.contacts || []).join(', ') || 'none'],
+    ['Pose', Object.keys(pose).length ? JSON.stringify(pose) : 'none'],
+    ['Joints', Object.keys(joints).length ? `${Object.keys(joints).length} values` : 'none'],
+  ].map(([key, value]) => `<div class="kv"><span>${esc(key)}</span><span>${esc(value)}</span></div>`).join('');
+}
+
+function renderSettings(settings) {
+  const models = settings.models || {};
+  providers = models.providers || {};
+  const active = models.active_provider || 'local';
+  if (providerSelect.value !== active && !providerSelect.dataset.touched) {
+    providerSelect.value = active;
+  }
+  fillProviderFields(providerSelect.value || active);
+
+  const tools = settings.tools || {};
+  const enabled = new Set(tools.enabled || []);
+  toolList.innerHTML = (tools.available || []).map(tool => `
+    <label class="toolItem">
+      <input type="checkbox" data-tool="${esc(tool)}" ${enabled.has(tool) ? 'checked' : ''} onchange="setTool(this.dataset.tool, this.checked)">
+      <span>${esc(tool)}</span>
+    </label>
+  `).join('');
+}
+
+function renderRobotSettings(state) {
+  if (!state || robotFieldsTouched) return;
+  const robot = state.robot_config || {};
+  const personality = state.personality || {};
+  const backend = robot.backend || state.backend || 'laptop';
+
+  robotNameInput.value = personality.name || state.robot_name || 'dino';
+  robotBackendSelect.value = backend;
+
+  const laptop = robot.laptop || {};
+  laptopWebcam.checked = laptop.webcam !== false;
+  laptopMicrophone.checked = laptop.microphone !== false;
+  laptopSpeaker.checked = laptop.speaker !== false;
+
+  const unitree = robot.unitree_g1 || {};
+  unitreeInterface.value = unitree.network_interface || 'eth0';
+  unitreeSpeakerId.value = unitree.speaker_id ?? 0;
+  unitreeVolume.value = unitree.volume ?? 80;
+
+  const lekiwi = robot.lekiwi || {};
+  lekiwiIp.value = lekiwi.remote_ip || '127.0.0.1';
+  lekiwiPort.value = lekiwi.port ?? 5555;
+  lekiwiId.value = lekiwi.id || 'lekiwi';
+
+  selectRobotBackend(false);
+}
+
+function selectRobotBackend(touched = true) {
+  if (touched) robotFieldsTouched = true;
+  const backend = robotBackendSelect.value || 'laptop';
+  document.getElementById('laptopFields').classList.toggle('active', backend === 'laptop');
+  document.getElementById('unitreeFields').classList.toggle('active', backend === 'unitree_g1');
+  document.getElementById('lekiwiFields').classList.toggle('active', backend === 'lekiwi');
+}
+
+function collectRobotConfig() {
+  return {
+    backend: robotBackendSelect.value || 'laptop',
+    laptop: {
+      webcam: laptopWebcam.checked,
+      microphone: laptopMicrophone.checked,
+      speaker: laptopSpeaker.checked,
+    },
+    fake: {},
+    unitree_g1: {
+      network_interface: unitreeInterface.value.trim() || 'eth0',
+      speaker_id: Number(unitreeSpeakerId.value || 0),
+      volume: Number(unitreeVolume.value || 80),
+    },
+    lekiwi: {
+      remote_ip: lekiwiIp.value.trim() || '127.0.0.1',
+      port: Number(lekiwiPort.value || 5555),
+      id: lekiwiId.value.trim() || 'lekiwi',
+    },
+  };
+}
+
+async function applyRobotSettings() {
+  const response = await fetch('/settings/robot', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: robotNameInput.value.trim() || 'dino',
+      robot: collectRobotConfig(),
+      persist: document.getElementById('persistRobotSettings').checked,
+    })
+  });
+  const data = await response.json();
+  toastMsg(data.message || 'Robot settings updated');
+  if (data.state) renderState(data.state);
+  robotFieldsTouched = false;
+  await refreshSettings();
+}
+
+function selectProvider() {
+  providerSelect.dataset.touched = '1';
+  fillProviderFields(providerSelect.value);
+}
+
+function fillProviderFields(provider) {
+  const cfg = providers[provider] || {};
+  if (document.activeElement !== modelInput) modelInput.value = cfg.model || '';
+  providerEnabled.checked = Boolean(cfg.enabled);
+}
+
+async function applyModelSettings() {
+  const response = await fetch('/settings/model', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      provider: providerSelect.value,
+      model: modelInput.value.trim(),
+      api_key: apiKeyInput.value,
+      enabled: providerEnabled.checked,
+      persist: document.getElementById('persistSettings').checked,
+      persist_secret: document.getElementById('persistSecret').checked
+    })
+  });
+  const data = await response.json();
+  apiKeyInput.value = '';
+  toastMsg(data.message || 'Model settings updated');
+  await refreshSettings();
+}
+
+async function setTool(tool, enabled) {
+  const response = await fetch('/settings/tool', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tool, enabled, persist: document.getElementById('persistSettings').checked })
+  });
+  const data = await response.json();
+  toastMsg(data.message || 'Tool updated');
+  await refreshSettings();
+}
+
+async function addCron() {
+  const name = document.getElementById('cronName').value.trim();
+  const every = Number(document.getElementById('cronSeconds').value || 300);
+  const instruction = document.getElementById('cronInstruction').value.trim();
+  if (!name || !instruction) return;
+  const response = await fetch('/cron', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, every_seconds: every, instruction })
+  });
+  const data = await response.json();
+  toastMsg(data.error || `Scheduled ${name}`);
+  if (data.state) renderState(data.state);
+}
+
+function renderTimeline(events) {
+  traceCount.textContent = `${events.length} event${events.length === 1 ? '' : 's'}`;
+  traceLog.innerHTML = events.slice(-16).reverse().map(event => {
+    const type = event.type || 'event';
+    const family = type.split('.')[0];
+    const data = event.data || {};
+    const detail = data.message || data.summary || data.goal || data.step || data.tool || event.message || short(JSON.stringify(data), 150);
+    const time = event.timestamp ? new Date(event.timestamp * 1000).toLocaleTimeString() : '';
+    return `
+      <div class="event ${esc(family)}">
+        <div class="mainText">${esc(type)}</div>
+        <div class="subText">${esc(time)} · ${esc(event.source || '')}</div>
+        <div class="subText">${esc(detail)}</div>
+      </div>
+    `;
+  }).join('') || '<div class="empty">No events yet</div>';
+}
+
+async function refreshSettings() {
+  const response = await fetch('/settings');
+  const data = await response.json();
+  if (data.state) renderState(data.state);
+}
+
+function connect() {
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${scheme}://${location.host}/events`);
+  ws.onopen = () => {
+    dot.classList.add('live');
+    wsChip.textContent = 'ws live';
+    wsChip.className = 'chip ok';
+  };
+  ws.onclose = () => {
+    dot.classList.remove('live');
+    wsChip.textContent = 'ws offline';
+    wsChip.className = 'chip warn';
+    setTimeout(connect, 1200);
+  };
+  ws.onmessage = event => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'state') renderState(msg.data);
+    if (msg.type === 'settings') refreshSettings();
+    if (msg.type === 'frame') {
+      cam.src = `data:image/jpeg;base64,${msg.jpeg}`;
+      camPh.style.display = 'none';
+      camChip.textContent = 'camera live';
+      camChip.className = 'chip ok';
+      document.getElementById('visionMeta').textContent = new Date().toLocaleTimeString();
+    }
+    if (msg.type === 'turn' && !msg.state_only && msg.ignored) {
+      toastMsg(msg.reason || 'Passive event ignored');
+    }
+  };
+}
+
+refreshSettings().catch(() => {});
+connect();
+</script>
+</body>
+</html>

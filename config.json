@@ -1,11 +1,95 @@
 {
-  "_comment": "Robo agent configuration. See README.md for full documentation.",
-  "name": "spacewalker",
+  "_comment": "Actum agent configuration. See README.md for full documentation.",
+  "name": "dino",
   "tts": "local",
   "_tts_options": "local (Kokoro via sounddevice) | unitree (robot's built-in speaker)",
+  "personality": {
+    "name": "dino",
+    "persona": "A warm, curious, practical robot companion that helps with robotics, research, and everyday reasoning.",
+    "likes": [
+      "clear plans",
+      "useful autonomy",
+      "learning from the environment",
+      "careful experiments"
+    ],
+    "principles": [
+      "be helpful without being intrusive",
+      "ask before disruptive or risky actions",
+      "make intent visible to the operator",
+      "prefer truthful uncertainty over confident guessing"
+    ],
+    "speaking_style": "concise, warm, and calm"
+  },
+  "companion": {
+    "always_on": true,
+    "proactive_mode": "conservative",
+    "_proactive_mode_options": "off | conservative | curious",
+    "direct_sources": [
+      "chat",
+      "language",
+      "voice",
+      "text"
+    ],
+    "passive_sources": [
+      "vision",
+      "timer",
+      "cron",
+      "loop"
+    ],
+    "min_seconds_between_proactive_actions": 60,
+    "vision_importance_threshold": 0.75,
+    "curious_importance_threshold": 0.55
+  },
+  "triggers": {
+    "vision": true,
+    "chat": true,
+    "language": true
+  },
+  "behavior_loop": {
+    "enabled": true,
+    "tick_seconds": 15,
+    "idle_review": true,
+    "idle_review_seconds": 45,
+    "idle_importance": 0.2,
+    "force_idle_reviews": false
+  },
+  "cron": [],
+  "models": {
+    "active_provider": "local",
+    "providers": {
+      "local": {
+        "enabled": true,
+        "model": "litert-community/gemma-4-E2B-it-litert-lm"
+      },
+      "openai": {
+        "enabled": false,
+        "model": "",
+        "api_key_env": "OPENAI_API_KEY"
+      },
+      "anthropic": {
+        "enabled": false,
+        "model": "",
+        "api_key_env": "ANTHROPIC_API_KEY"
+      }
+    }
+  },
+  "tools": {
+    "enabled": [],
+    "_enabled_comment": "Empty means all registered tools are available."
+  },
+  "memory": {
+    "enabled": true,
+    "path": "data/memory.json",
+    "max_episodes": 1000
+  },
   "robot": {
-    "backend": "fake",
-    "_backend_options": "fake | unitree_g1 | lekiwi",
+    "backend": "laptop",
+    "_backend_options": "laptop | fake | unitree_g1 | lekiwi",
+    "laptop": {
+      "webcam": true,
+      "microphone": true,
+      "speaker": true
+    },
     "fake": {},
     "unitree_g1": {
       "network_interface": "eth0",
@@ -17,6 +101,11 @@
       "port": 5555,
       "id": "lekiwi"
     }
+  },
+  "mcp": {
+    "enabled": false,
+    "_comment": "Enable only trusted MCP servers. Install with: pip install -e .[mcp]",
+    "servers": {}
   },
   "hardware": {
     "enabled": false,

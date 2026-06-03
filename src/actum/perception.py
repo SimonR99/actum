@@ -6,12 +6,13 @@ Missing hardware or dependencies degrade gracefully.
 Camera notes (Jetson):
   - USB cameras work via cv2.VideoCapture(index)
   - CSI cameras (e.g. IMX219) need a GStreamer pipeline; set
-    ROBO_CAMERA=csi (or pass camera_source="csi") to enable it.
+    ACTUM_CAMERA=csi (or pass source="csi") to enable it.
     Requires OpenCV built with GStreamer support (default on JetPack).
 
 Audio notes (Jetson):
   - sounddevice uses ALSA. If the default device is wrong, set
-    ROBO_AUDIO_DEVICE to the device name or index, e.g. "hw:1,0".
+    ACTUM_AUDIO_DEVICE to the device name or index, e.g. "hw:1,0".
+    Legacy SENSORIMOTOR_* and ROBO_* variables are still accepted for older deployments.
 """
 
 import base64
@@ -48,6 +49,17 @@ def _is_jetson() -> bool:
     return platform.machine() == "aarch64" and Path("/etc/nv_tegra_release").exists()
 
 
+def _env(name: str, legacy_name: str | None = None, default: str | None = None) -> str | None:
+    sensorimotor_name = name.replace("ACTUM_", "SENSORIMOTOR_", 1)
+    for candidate in (name, sensorimotor_name, legacy_name):
+        if not candidate:
+            continue
+        value = os.environ.get(candidate)
+        if value is not None:
+            return value
+    return default
+
+
 # ── Camera ─────────────────────────────────────────────────────────────────────
 
 def open_camera(source: str | int | None = None):
@@ -67,7 +79,7 @@ def open_camera(source: str | int | None = None):
         return None
 
     if source is None:
-        source = os.environ.get("ROBO_CAMERA", "auto")
+        source = _env("ACTUM_CAMERA", "ROBO_CAMERA", "auto")
 
     if source == "auto":
         source = "csi" if _is_jetson() else 0
@@ -166,7 +178,7 @@ class EnergyVAD:
         speech_thr = self._noise_floor * self.speech_ratio
         silence_thr = self._noise_floor * self.silence_ratio
 
-        if os.environ.get("ROBO_VAD_DEBUG"):
+        if _env("ACTUM_VAD_DEBUG", "ROBO_VAD_DEBUG"):
             print(
                 f"[vad] rms={rms:.4f} floor={self._noise_floor:.4f} "
                 f"s_thr={speech_thr:.4f} q_thr={silence_thr:.4f} "
@@ -216,8 +228,8 @@ class AudioCapture:
     on_speech is called from the audio thread — use loop.call_soon_threadsafe
     to forward events to an asyncio queue (see agent.py for the pattern).
 
-    Set ROBO_AUDIO_DEVICE to override the default ALSA device, e.g.:
-        ROBO_AUDIO_DEVICE=hw:1,0 robo
+    Set ACTUM_AUDIO_DEVICE to override the default ALSA device, e.g.:
+        ACTUM_AUDIO_DEVICE=hw:1,0 actum
     """
 
     def __init__(
@@ -240,7 +252,7 @@ class AudioCapture:
             print(f"[mic] audio input unavailable ({e}) — microphone disabled.")
             return
 
-        device = os.environ.get("ROBO_AUDIO_DEVICE") or None
+        device = _env("ACTUM_AUDIO_DEVICE", "ROBO_AUDIO_DEVICE") or None
         selected_rate = self._sample_rate
         print(f"[mic] listening (device={device or 'default'}, requested {selected_rate} Hz)…")
 

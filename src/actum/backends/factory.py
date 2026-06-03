@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from robo.backends.base import RobotBackend
-from robo.backends.fake import FakeBackend
-from robo.backends.lekiwi import LeKiwiBackend
-from robo.backends.unitree_g1 import UnitreeG1Backend
+from actum.backends.base import RobotBackend
+from actum.backends.fake import FakeBackend
+from actum.backends.laptop import LaptopBackend
+from actum.backends.lekiwi import LeKiwiBackend
+from actum.backends.unitree_g1 import UnitreeG1Backend
 
 
 def _legacy_backend_config(config: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -16,7 +17,7 @@ def _legacy_backend_config(config: dict[str, Any]) -> tuple[str, dict[str, Any]]
         backend = str(hardware.get("type") or "unitree_g1").lower()
         if backend == "unitree_g1":
             return "unitree_g1", dict(hardware)
-    return "fake", {}
+    return "laptop", {}
 
 
 def create_backend(config: dict[str, Any]) -> RobotBackend:
@@ -27,6 +28,8 @@ def create_backend(config: dict[str, Any]) -> RobotBackend:
     else:
         backend_name, backend_cfg = _legacy_backend_config(config)
 
+    if backend_name in {"laptop", "local", "companion"}:
+        return LaptopBackend(backend_cfg)
     if backend_name in {"fake", "sim", "simulation"}:
         return FakeBackend(backend_cfg)
     if backend_name == "unitree_g1":

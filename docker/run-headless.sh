@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run vlm-g1 in headless mode (no web server)
+# Run Actum in headless mode (no web server)
 # Speech input via microphone → agent → speaker output
 # Also accepts stdin commands
 # Usage: ./docker/run-headless.sh
@@ -9,7 +9,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "Running vlm-g1 in headless mode..."
+echo "Running Actum in headless mode..."
 echo "  Mic -> Agent -> Speaker (no web dashboard)"
 echo "  Type commands in terminal or speak:"
 echo ""
@@ -31,14 +31,14 @@ mkdir -p "$PROJECT_ROOT/logs"
 
 docker run --rm -it \
     --gpus all \
-    --name vlm-g1-headless \
+    --name actum-headless \
     "${ENV_ARGS[@]}" \
     -v "$PROJECT_ROOT/config.json:/workspace/config.json:ro" \
-    -v vlm-g1-huggingface:/root/.cache/huggingface \
+    -v actum-huggingface:/root/.cache/huggingface \
     -v "$PROJECT_ROOT/logs:/workspace/logs" \
     "${DEVICE_ARGS[@]}" \
-    vlm-g1:latest \
-    robo
+    actum:latest \
+    actum
 
 echo ""
 echo "Headless mode ended."

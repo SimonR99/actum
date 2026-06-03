@@ -1,6 +1,6 @@
-# Multi-stage build for vlm-g1 robot agent
+# Multi-stage build for Actum robot agent
 # Supports GPU via NVIDIA CUDA (x86) and Jetson (aarch64)
-# Build: docker build -t vlm-g1:latest .
+# Build: docker build -t actum:latest .
 # Run:   docker compose up
 
 ARG CUDA_VERSION=12.4.1
@@ -98,4 +98,4 @@ ENV MODEL_PATH=/root/.cache/huggingface/hub/litert-community/gemma-4-E2B-it-lite
 EXPOSE 8000
 
 # Default: run the monitoring server
-CMD ["robo-server"]
+CMD ["actum-server"]

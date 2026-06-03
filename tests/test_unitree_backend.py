@@ -1,4 +1,4 @@
-from robo.backends.unitree_g1 import UnitreeG1Backend
+from actum.backends.unitree_g1 import UnitreeG1Backend
 
 
 class FakeLoco:
@@ -15,7 +15,7 @@ class FakeLoco:
 
 
 def test_unitree_drive_sends_bounded_velocity_and_stop(monkeypatch):
-    monkeypatch.setattr("robo.backends.unitree_g1.time.sleep", lambda _duration: None)
+    monkeypatch.setattr("actum.backends.unitree_g1.time.sleep", lambda _duration: None)
     loco = FakeLoco()
     robot = UnitreeG1Backend({"network_interface": "eth0"})
     robot._loco = loco

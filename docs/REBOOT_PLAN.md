@@ -1,4 +1,4 @@
-# Robo Reboot Plan
+# Actum Reboot Plan
 
 This repo is now moving from prototype toward a reference architecture for agentic robotics.
 
@@ -8,9 +8,17 @@ Implemented:
 
 - `RobotRuntime`: shared runtime state for the agent, tools, backend, event log, tool graph, and dashboard.
 - `RobotBackend`: common adapter interface.
-- Backends: `fake`, `unitree_g1`, `lekiwi`.
+- Backends: `laptop`, `fake`, `unitree_g1`, `lekiwi`.
+- `CompanionPolicy`: always-on gate for direct vs passive events.
+- `MemoryStore`: JSON-backed facts, people, places, spatial notes, and episodic observations.
+- Configurable personality: name, persona, likes, principles, and speaking style.
+- Local software tools: direct URL fetch plus optional MCP server bridge.
 - `IntentState`: live goal, plan steps, active step, done/blocked state.
-- Dashboard stream for intent and tool graph.
+- `BehaviorTreeState`: operator-visible waiting/perception/action nodes driven by the background loop.
+- Background autonomy loop for idle perception review and scheduled cron-style jobs.
+- Live map observations and body perception state.
+- Dashboard stream for intent, behavior tree, map/body state, settings, and tool graph.
+- Runtime settings for model provider/API-key state and selectable tools.
 - Lightweight imports and tests without requiring a robot or model runtime.
 - No vendored Unitree SDK tree.
 
@@ -18,10 +26,12 @@ Still needed:
 
 - Safety supervisor with speed, workspace, force, and approval gates.
 - Capability registry that can be exported as MCP tools.
+- Full MCP server adapter that exports Actum capabilities to external agents.
 - ROS 2 adapter for teams already using ROS graph/action/service contracts.
 - LeRobot policy execution adapter, including SmolVLA/pi0/GR00T policy wrappers where practical.
-- Persistent event store and dataset recorder.
-- Richer frontend with graph layout, timeline replay, pause/resume/cancel/e-stop controls.
+- Durable event store, vector retrieval, and dataset recorder.
+- Real spatial map integration: SLAM/localization, object landmarks, and robot-frame/world-frame transforms.
+- Richer frontend graph layout, timeline replay, pause/resume/cancel/e-stop controls, and persisted settings profiles.
 
 ## Architecture Direction
 
@@ -30,6 +40,13 @@ Keep the robotics runtime independent from agent frameworks:
 ```
 RobotRuntime
   IntentState
+  BehaviorTreeState
+  MemoryStore
+  CompanionPolicy
+  CronRegistry
+  SpatialMap
+  BodyPerception
+  RuntimeSettings
   EventLog
   ToolGraph
   CapabilityRegistry
@@ -40,6 +57,7 @@ RobotRuntime
 Adapters can expose or consume this runtime:
 
 - MCP server adapter for external LLM agents.
+- MCP client bridge for trusted software/data tools such as search, files, databases, or browser automation.
 - ROS 2 adapter for topics, services, actions, TF, MoveIt, Nav2.
 - LeRobot adapter for robot state/action schemas, datasets, policies, and rollouts.
 - Web dashboard adapter for human operators.
@@ -64,10 +82,11 @@ Use a two-layer autonomy model:
 
 ### Milestone 1: Runtime Kernel
 
-- Finish capability registry.
+- Harden capability registry schemas.
+- Expand persistent memory from JSON to an append-only event store with retrieval.
 - Add safety supervisor.
-- Add persistent event log.
 - Add fake backend simulation scenarios.
+- Add laptop companion scenarios for passive vision/timer events.
 
 ### Milestone 2: Operator Control
 
@@ -75,6 +94,7 @@ Use a two-layer autonomy model:
 - Add approval gates for risky actions.
 - Add timeline replay.
 - Add graph layout for tool usage and plan execution.
+- Surface companion decisions and personality in the dashboard.
 
 ### Milestone 3: Robot Integrations
 

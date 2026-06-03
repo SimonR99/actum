@@ -1,5 +1,5 @@
 [project]
-name = "robo"
+name = "actum"
 version = "0.1.0"
 description = "On-device multimodal robot agent — agentic multi-step tool calling, headless audio/vision"
 requires-python = ">=3.10"
@@ -31,25 +31,26 @@ dependencies = [
 
 [project.optional-dependencies]
 # Camera capture — choose the right build for your platform:
-#   x86/macOS:  pip install robo[camera]
+#   x86/macOS:  pip install actum[camera]
 #   Jetson:     sudo apt install python3-opencv  (comes with GStreamer support)
 camera = ["opencv-python-headless>=4.8.0"]
 dev = ["pytest>=8.0"]
 # Hardware/policy stacks are optional so local tests and dashboard work without robots.
+mcp = ["mcp>=1.0.0"]
 unitree = ["unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git"]
 lekiwi = ["lerobot[lekiwi]>=0.5.1"]
 policies = ["lerobot>=0.5.1"]
 
 [project.scripts]
-robo        = "robo.agent:cli"
-robo-server = "robo.server:cli"
+actum        = "actum.agent:cli"
+actum-server = "actum.server:cli"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatchling.build.targets.wheel]
-packages = ["src/robo"]
+packages = ["src/actum"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
