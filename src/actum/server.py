@@ -13,6 +13,8 @@ Run:
 from __future__ import annotations
 
 import asyncio
+import base64
+import importlib.util
 import json
 import os
 import threading
@@ -155,6 +157,59 @@ def attach_server(agent: RobotAgent, app: FastAPI):
             event["audio"] = str(audio)
         await agent.event_bus.put(event)
         return {"queued": event["source"]}
+
+    @app.post("/debug/transcribe")
+    async def debug_transcribe(body: dict | None = None):
+        """Transcribe a base64 WAV blob through the configured STT engine only.
+
+        Deliberately *not* gated behind the runtime-ready check: it exercises the
+        speech-to-text stage in isolation, so voice transcription can be tested
+        even when model loading / hardware bring-up has failed. Returns an
+        actionable message when the selected engine's dependency is missing
+        instead of a silent empty transcript.
+        """
+        body = body or {}
+        audio = str(body.get("audio") or "")
+        settings = agent.runtime.settings
+        speech = getattr(settings, "speech", {}) or {}
+        engine_name = str(speech.get("stt_engine", "whisper"))
+        info: dict = {"engine": engine_name}
+
+        if not audio:
+            return JSONResponse({**info, "ok": False, "error": "No audio provided."}, status_code=400)
+        try:
+            info["audio_bytes"] = len(base64.b64decode(audio))
+        except Exception:
+            return JSONResponse({**info, "ok": False, "error": "Audio is not valid base64."}, status_code=400)
+
+        # Pre-flight dependency checks → clear guidance instead of empty output.
+        if engine_name == "whisper" and importlib.util.find_spec("faster_whisper") is None:
+            return {**info, "ok": False, "transcript": "",
+                    "error": "faster-whisper is not installed. Install with  pip install -e '.[whisper]'  "
+                             "or pick OpenAI / Multimodal model as the speech engine."}
+        if engine_name == "openai" and importlib.util.find_spec("openai") is None:
+            return {**info, "ok": False, "transcript": "",
+                    "error": "openai is not installed. Install with  pip install -e '.[openai]'."}
+
+        from actum.inference.stt import build_stt
+
+        engine = build_stt(settings)
+        if engine is None:
+            return {**info, "ok": True, "transcript": "",
+                    "note": "Engine 'model' sends audio straight to the multimodal LLM, so there is no "
+                            "standalone transcript to show. Switch to Whisper or OpenAI to test STT."}
+
+        started = time.time()
+        try:
+            text = await asyncio.get_running_loop().run_in_executor(None, engine.transcribe, audio)
+        except Exception as exc:  # surface engine/runtime errors to the operator
+            return {**info, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        info["elapsed"] = round(time.time() - started, 2)
+        info["transcript"] = text
+        info["ok"] = bool(text)
+        if not text:
+            info["note"] = "Engine ran but produced no text — audio may be too short/quiet, or transcription failed (check server logs)."
+        return info
 
     @app.get("/settings")
     async def settings_get():

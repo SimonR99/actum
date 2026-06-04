@@ -3,6 +3,17 @@
 Docker images are for local development, dashboard operation, and Jetson deployment.
 The image build compiles the React/Tailwind dashboard from `frontend/` and serves the generated bundle through `actum-server`.
 
+The image is **self-contained** — it bundles every stack so there are no host
+environment conflicts: the local LiteRT/Gemma model, the OpenAI cloud provider,
+local Whisper speech-to-text, camera/audio support, and the MCP bridge. The default
+local Gemma and Whisper `base` models are baked in so first use is instant.
+
+API keys come from the project `.env` automatically (the compose files load it when
+present), so `OPENAI_API_KEY=...` in `.env` is enough to use the OpenAI provider or
+cloud STT. Voice from the dashboard works without any host audio device — the browser
+records and the container transcribes with Whisper; host `/dev/snd` is only needed for
+the headless server-side microphone.
+
 ## Build
 
 ```bash

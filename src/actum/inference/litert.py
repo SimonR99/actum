@@ -62,12 +62,24 @@ class LiteRTProvider(InferenceProvider):
         model_path = self._resolve_model_path()
         compute = _resolve_compute_backend(self._compute)
         print(f"Loading LiteRT model from {model_path} on {self._compute.upper()}…")
-        self._engine = litert_lm.Engine(
-            model_path,
-            backend=compute,
-            vision_backend=compute,
-            audio_backend=litert_lm.Backend.CPU,
-        )
+        try:
+            self._engine = litert_lm.Engine(
+                model_path,
+                backend=compute,
+                vision_backend=compute,
+                audio_backend=litert_lm.Backend.CPU,
+            )
+        except Exception as exc:
+            if "Vision Encoder" in str(exc) or "vision" in str(exc).lower():
+                print(f"[litert] vision encoder unavailable ({exc}); retrying without vision")
+                self.supports_vision = False
+                self._engine = litert_lm.Engine(
+                    model_path,
+                    backend=compute,
+                    audio_backend=litert_lm.Backend.CPU,
+                )
+            else:
+                raise
         self._engine.__enter__()
         self._conversation = self._engine.create_conversation(
             messages=[{"role": "system", "content": system_prompt}],

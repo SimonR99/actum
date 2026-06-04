@@ -10,7 +10,6 @@ import {
   MessageSquare,
   Mic2,
   Network,
-  Radio,
   Save,
   Send,
   Settings,
@@ -300,7 +299,7 @@ export default function App() {
   const serverReady = Boolean(state?.server?.ready);
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-950">
+    <div className="min-h-screen text-slate-900">
       <Header
         robotName={robotName}
         wsLive={wsLive}
@@ -312,18 +311,18 @@ export default function App() {
         serverReady={serverReady}
       />
 
-      <main className="grid h-[calc(100vh-72px)] min-h-[760px] grid-cols-[320px_minmax(520px,1fr)_440px] grid-rows-[minmax(420px,1fr)_300px] gap-4 p-4 max-[1280px]:h-auto max-[1280px]:grid-cols-2 max-[1280px]:grid-rows-none max-[860px]:grid-cols-1">
-        <section className="panel row-span-2 flex flex-col">
-          <PanelHeader title={t("panel.intent")} meta={state?.intent?.status || t("meta.idle")} icon={BrainCircuit} />
+      <main className="grid h-[calc(100vh-72px)] min-h-[760px] grid-cols-[330px_minmax(520px,1fr)_450px] grid-rows-[minmax(420px,1fr)_300px] gap-5 p-5 max-[1280px]:h-auto max-[1280px]:grid-cols-2 max-[1280px]:grid-rows-none max-[860px]:grid-cols-1">
+        <section className="panel row-span-2 flex animate-rise flex-col" style={{ animationDelay: "0ms" }}>
+          <PanelHeader title={t("panel.intent")} meta={state?.intent?.status || t("meta.idle")} icon={BrainCircuit} index="01" />
           <IntentPanel state={state} />
         </section>
 
-        <section className="panel flex flex-col">
-          <PanelHeader title={t("panel.perception")} meta={lastFrameAt || t("perception.waiting")} icon={Eye} />
+        <section className="panel flex animate-rise flex-col" style={{ animationDelay: "70ms" }}>
+          <PanelHeader title={t("panel.perception")} meta={lastFrameAt || t("perception.waiting")} icon={Eye} index="02" />
           <PerceptionPanel state={state} frame={frame} />
         </section>
 
-        <section className="panel row-span-2 flex min-h-0 flex-col max-[1280px]:min-h-[640px]">
+        <section className="panel row-span-2 flex min-h-0 animate-rise flex-col max-[1280px]:min-h-[640px]" style={{ animationDelay: "140ms" }}>
           <RightRail
             view={rightView}
             setView={setRightView}
@@ -337,13 +336,13 @@ export default function App() {
           />
         </section>
 
-        <section className="grid min-h-0 grid-cols-2 gap-4 max-[860px]:grid-cols-1">
+        <section className="grid min-h-0 animate-rise grid-cols-2 gap-5 max-[860px]:grid-cols-1" style={{ animationDelay: "210ms" }}>
           <div className="panel flex min-h-0 flex-col">
-            <PanelHeader title={t("panel.toolgraph")} meta={`${state?.tool_graph?.length || 0} ${t("toolgraph.calls")}`} icon={Network} />
+            <PanelHeader title={t("panel.toolgraph")} meta={`${state?.tool_graph?.length || 0} ${t("toolgraph.calls")}`} icon={Network} index="03" />
             <ToolGraph nodes={state?.tool_graph || []} />
           </div>
           <div className="panel flex min-h-0 flex-col">
-            <PanelHeader title={t("panel.maptimeline")} meta="memory" icon={Map} />
+            <PanelHeader title={t("panel.maptimeline")} meta="memory" icon={Map} index="04" />
             <MapTimeline state={state} />
           </div>
         </section>
@@ -351,10 +350,11 @@ export default function App() {
 
       <div
         className={cx(
-          "fixed bottom-4 right-4 z-50 max-w-md rounded-lg bg-slate-950 px-4 py-3 text-sm font-medium text-white shadow-xl transition",
+          "fixed bottom-5 right-5 z-50 flex max-w-md items-center gap-3 rounded-xl border border-white/10 bg-slate-950 py-3 pl-4 pr-5 text-sm font-medium text-white shadow-lift transition duration-300",
           toast ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"
         )}
       >
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
         {toast}
       </div>
     </div>
@@ -364,12 +364,17 @@ export default function App() {
 function Header({ robotName, wsLive, cameraLive, backend, connected, activeProvider, serverStatus, serverReady }) {
   const { t } = useT();
   return (
-    <header className="grid min-h-[72px] grid-cols-[1fr_auto] items-center gap-4 border-b border-slate-200 bg-white px-4 max-[860px]:grid-cols-1 max-[860px]:py-3">
-      <div className="flex items-center gap-3">
-        <span className={cx("h-3 w-3 rounded-full", wsLive ? "bg-emerald-500 shadow-[0_0_0_5px_rgba(16,185,129,.14)]" : "bg-slate-300")} />
+    <header className="grid min-h-[72px] grid-cols-[1fr_auto] items-center gap-4 border-b border-slate-200 bg-white/80 px-5 backdrop-blur-md max-[860px]:grid-cols-1 max-[860px]:py-3">
+      <div className="flex items-center gap-3.5">
+        <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-200 bg-slate-50">
+          <span className={cx("h-2.5 w-2.5 rounded-full transition-colors", wsLive ? "animate-live-ping bg-emerald-500" : "bg-slate-300")} />
+        </span>
         <div className="min-w-0">
-          <div className="truncate text-lg font-bold leading-6">{robotName}</div>
-          <div className="truncate text-xs text-slate-500">{t("app.subtitle")}</div>
+          <div className="flex items-baseline gap-2">
+            <span className="truncate text-lg font-extrabold leading-6 tracking-tight">{robotName}</span>
+            <span className="mono-label hidden sm:inline">actum</span>
+          </div>
+          <div className="truncate font-mono text-[11px] text-slate-500">{t("app.subtitle")}</div>
         </div>
       </div>
 
@@ -388,13 +393,13 @@ function Header({ robotName, wsLive, cameraLive, backend, connected, activeProvi
 function LanguageToggle() {
   const { lang, setLang } = useT();
   return (
-    <div className="inline-flex overflow-hidden rounded-full border border-slate-200">
+    <div className="inline-flex overflow-hidden rounded-full border border-slate-200 bg-white p-0.5">
       {LANGUAGES.map((option) => (
         <button
           key={option.id}
           className={cx(
-            "h-7 px-3 text-xs font-bold transition",
-            lang === option.id ? "bg-slate-950 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+            "h-6 rounded-full px-3 font-mono text-[11px] font-semibold uppercase tracking-tight transition",
+            lang === option.id ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-900"
           )}
           onClick={() => setLang(option.id)}
         >
@@ -408,17 +413,18 @@ function LanguageToggle() {
 function StatusChip({ ok, label }) {
   return (
     <span className={cx("chip", ok ? "chip-ok" : "chip-warn")}>
-      {ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Radio className="h-3.5 w-3.5" />}
+      <span className={cx("h-1.5 w-1.5 rounded-full", ok ? "bg-emerald-500" : "bg-amber-700/70")} />
       {label}
     </span>
   );
 }
 
-function PanelHeader({ title, meta, icon: Icon, right }) {
+function PanelHeader({ title, meta, icon: Icon, right, index }) {
   return (
     <div className="panel-header">
-      <div className="flex min-w-0 items-center gap-2">
-        <Icon className="h-4 w-4 text-slate-500" />
+      <div className="flex min-w-0 items-center gap-2.5">
+        {index ? <span className="mono-label text-blue-600/70">{index}</span> : null}
+        <Icon className="h-4 w-4 text-slate-400" />
         <div className="panel-title">{title}</div>
       </div>
       {right || <div className="panel-meta">{meta}</div>}
@@ -594,13 +600,13 @@ function ChatBubble({ message, robotName }) {
   const { t } = useT();
   const isUser = message.role === "user";
   return (
-    <div className={cx("flex", isUser ? "justify-end" : "justify-start")}>
-      <div className={cx("max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm", isUser ? "rounded-br-sm bg-blue-600 text-white" : "rounded-bl-sm border border-slate-200 bg-white text-slate-900")}>
-        <div className={cx("mb-1 text-[11px] font-bold uppercase tracking-wide", isUser ? "text-blue-100" : "text-slate-400")}>
+    <div className={cx("flex animate-rise", isUser ? "justify-end" : "justify-start")}>
+      <div className={cx("max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm", isUser ? "rounded-br-md bg-blue-600 text-white shadow-[0_8px_18px_-10px_rgba(31,68,245,0.65)]" : "rounded-bl-md border border-slate-200 bg-white text-slate-900")}>
+        <div className={cx("mb-1 font-mono text-[10px] font-semibold uppercase tracking-label", isUser ? "text-blue-100" : "text-slate-400")}>
           {isUser ? t("chat.you") : robotName}
           {!isUser && message.source && !["chat", "language", "voice", "text"].includes(message.source) ? ` · ${message.source}` : ""}
         </div>
-        {isUser ? <div className="whitespace-pre-wrap break-words">{message.text}</div> : <Markdown text={message.text} />}
+        {isUser ? <div className="whitespace-pre-wrap break-words leading-relaxed">{message.text}</div> : <Markdown text={message.text} />}
       </div>
     </div>
   );
@@ -610,8 +616,8 @@ function ThinkingBubble({ robotName }) {
   const { t } = useT();
   return (
     <div className="flex justify-start">
-      <div className="rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-500">
-        <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">{robotName}</div>
+      <div className="rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-500 shadow-sm">
+        <div className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-label text-slate-400">{robotName}</div>
         <div className="flex items-center gap-2">
           <span className="flex gap-1">
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.2s]" />
@@ -650,9 +656,12 @@ function IntentPanel({ state }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-slate-200 p-4">
-        <div className="text-xs font-bold uppercase text-slate-500">{t("intent.goal")}</div>
-        <div className="mt-2 text-xl font-bold leading-7">{goal}</div>
+      <div className="relative border-b border-slate-200 bg-gradient-to-b from-slate-50/80 to-transparent p-5">
+        <div className="mono-label flex items-center gap-2">
+          <span className="h-1 w-1 rounded-full bg-blue-600" />
+          {t("intent.goal")}
+        </div>
+        <div className="mt-2.5 text-2xl font-extrabold leading-8 tracking-tight text-slate-900">{goal}</div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto p-4">
@@ -679,14 +688,14 @@ function IntentPanel({ state }) {
 function StepRow({ step, index }) {
   const status = step.status || "pending";
   return (
-    <div className={cx("rounded-lg border p-3", statusTone(status))}>
+    <div className={cx("rounded-xl border p-3 transition", statusTone(status))}>
       <div className="flex items-start gap-3">
-        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-xs font-bold text-slate-600">
-          {status === "done" ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : index + 1}
+        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white font-mono text-[11px] font-bold tabular-nums text-slate-600">
+          {status === "done" ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : String(index + 1).padStart(2, "0")}
         </div>
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-900">{step.label || step.id}</div>
-          <div className="mt-0.5 text-xs capitalize text-slate-500">{status}</div>
+          <div className="text-sm font-semibold leading-5 text-slate-900">{step.label || step.id}</div>
+          <div className="mono-label mt-1">{status}</div>
         </div>
       </div>
     </div>
@@ -695,23 +704,23 @@ function StepRow({ step, index }) {
 
 function BehaviorNode({ node }) {
   return (
-    <div className={cx("rounded-lg border p-3", statusTone(node.status || "waiting"))}>
+    <div className={cx("rounded-xl border p-3 transition", statusTone(node.status || "waiting"))}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-slate-900">{node.label || node.id}</div>
-          <div className="mt-1 text-xs text-slate-500">
+          <div className="mono-label mt-1 normal-case">
             {node.kind || "node"} · {node.status || "waiting"}
           </div>
         </div>
-        <span className="rounded-full bg-white px-2 py-1 text-xs font-medium text-slate-600">{node.id}</span>
+        <span className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-1 font-mono text-[10px] font-medium text-slate-500">{node.id}</span>
       </div>
-      {node.detail ? <div className="mt-2 text-xs text-slate-600">{node.detail}</div> : null}
+      {node.detail ? <div className="mt-2 text-xs leading-relaxed text-slate-600">{node.detail}</div> : null}
     </div>
   );
 }
 
 function statusTone(status) {
-  if (status === "active") return "border-blue-200 bg-blue-50";
+  if (status === "active") return "border-blue-200 bg-blue-50 ring-1 ring-blue-100";
   if (status === "done") return "border-emerald-200 bg-emerald-50";
   if (status === "blocked" || status === "failed") return "border-red-200 bg-red-50";
   return "border-slate-200 bg-slate-50";
@@ -728,12 +737,19 @@ function PerceptionPanel({ state, frame }) {
   return (
     <div className="grid min-h-0 flex-1 grid-cols-[minmax(360px,1fr)_320px] gap-4 p-4 max-[1180px]:grid-cols-1">
       <div className="min-h-0">
-        <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
+        <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-slate-300 bg-slate-950 shadow-inner ring-1 ring-black/5">
           {frame ? (
             <img className="h-full w-full object-contain" src={frame} alt="Robot camera feed" />
           ) : (
-            <div className="grid h-full place-items-center text-sm text-slate-400">{t("perception.noFrame")}</div>
+            <div className="grid h-full place-items-center gap-2 text-center">
+              <Camera className="mx-auto h-6 w-6 text-slate-600" />
+              <span className="font-mono text-[11px] uppercase tracking-label text-slate-500">{t("perception.noFrame")}</span>
+            </div>
           )}
+          <span className="absolute left-2.5 top-2.5 flex items-center gap-1.5 rounded-md bg-black/45 px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-label text-white/90 backdrop-blur-sm">
+            <span className={cx("h-1.5 w-1.5 rounded-full", frame ? "animate-live-ping bg-emerald-400" : "bg-slate-500")} />
+            cam
+          </span>
         </div>
       </div>
 
@@ -773,18 +789,21 @@ function ToolGraph({ nodes }) {
             const ok = node.result ? node.result.ok : null;
             return (
               <div key={node.id || index} className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
-                <div className={cx("grid h-7 w-7 place-items-center rounded-full text-xs font-bold", ok === false ? "bg-red-600 text-white" : ok === true ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600")}>
-                  {index + 1}
+                <div className="relative flex justify-center">
+                  {index < visible.length - 1 ? <span className="absolute top-7 h-[calc(100%-12px)] w-px bg-slate-200" /> : null}
+                  <div className={cx("relative z-10 grid h-7 w-7 place-items-center rounded-lg font-mono text-[11px] font-bold tabular-nums", ok === false ? "bg-red-600 text-white" : ok === true ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600")}>
+                    {String(index + 1).padStart(2, "0")}
+                  </div>
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold">{node.type || "tool"}</div>
+                      <div className="truncate font-mono text-sm font-semibold text-slate-900">{node.type || "tool"}</div>
                       <div className="mt-1 text-xs text-slate-500">{node.result ? node.result.message : t("toolgraph.queued")}</div>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500">{node.id}</span>
+                    <span className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[10px] text-slate-500">{node.id}</span>
                   </div>
-                  <div className="mt-2 text-xs text-slate-600">{summarizeAction(node.action || {}, t)}</div>
+                  <div className="mt-2 font-mono text-[11px] leading-relaxed text-slate-600">{summarizeAction(node.action || {}, t)}</div>
                 </div>
               </div>
             );
@@ -842,12 +861,15 @@ function MapTimeline({ state }) {
             const type = event.type || "event";
             const data = event.data || {};
             return (
-              <div key={`${type}-${index}`} className="rounded-lg border border-slate-200 bg-white p-3">
+              <div key={`${type}-${index}`} className="rounded-xl border border-slate-200 bg-white p-3">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="truncate text-sm font-semibold">{type}</div>
-                  <div className="text-xs text-slate-500">{event.timestamp ? new Date(event.timestamp * 1000).toLocaleTimeString() : ""}</div>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600/60" />
+                    <div className="truncate font-mono text-[12px] font-semibold text-slate-900">{type}</div>
+                  </div>
+                  <div className="shrink-0 font-mono text-[11px] tabular-nums text-slate-400">{event.timestamp ? new Date(event.timestamp * 1000).toLocaleTimeString() : ""}</div>
                 </div>
-                <div className="mt-1 text-xs text-slate-500">{short(data.message || data.summary || data.goal || data.step || data.tool || event.message || JSON.stringify(data), 140)}</div>
+                <div className="mt-1.5 pl-3.5 text-xs leading-relaxed text-slate-500">{short(data.message || data.summary || data.goal || data.step || data.tool || event.message || JSON.stringify(data), 140)}</div>
               </div>
             );
           })}
@@ -1077,6 +1099,8 @@ function ModelSettings({ state, showToast, refresh }) {
         </select>
       </Labeled>
 
+      <TranscriptionTest showToast={showToast} />
+
       <Labeled label={t("model.provider")}>
         <select className="field" value={provider} onChange={(event) => setProvider(event.target.value)}>
           <option value="local">Local</option>
@@ -1099,6 +1123,88 @@ function ModelSettings({ state, showToast, refresh }) {
         <SlidersHorizontal className="h-4 w-4" />
         {t("model.apply")}
       </button>
+    </div>
+  );
+}
+
+// Isolated STT probe — records a browser WAV and runs it through /debug/transcribe,
+// which exercises only the speech engine (works even if the agent runtime is down).
+function TranscriptionTest({ showToast }) {
+  const { t } = useT();
+  const [recording, setRecording] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const recorderRef = useRef(null);
+
+  useEffect(() => () => recorderRef.current?.cancel?.(), []);
+
+  async function toggle() {
+    if (busy) return;
+    if (recording) {
+      const recorder = recorderRef.current;
+      recorderRef.current = null;
+      setRecording(false);
+      if (!recorder) return;
+      setBusy(true);
+      try {
+        const audio = await recorder.stop();
+        setResult(await api("/debug/transcribe", { method: "POST", body: JSON.stringify({ audio }) }));
+      } catch (error) {
+        setResult({ ok: false, error: error.message });
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    try {
+      recorderRef.current = await startBrowserWavRecorder();
+      setResult(null);
+      setRecording(true);
+      showToast(t("chat.recording"));
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  const tone = result?.ok && result?.transcript
+    ? "border-emerald-200 bg-emerald-50"
+    : result?.error
+      ? "border-red-200 bg-red-50"
+      : "border-slate-200 bg-white";
+
+  return (
+    <div className="card-inset grid gap-3">
+      <SectionTitle title={t("stt.test")} meta={result?.engine || ""} />
+      <p className="text-xs leading-relaxed text-slate-500">{t("stt.testHint")}</p>
+      <button
+        className={cx("btn w-full", recording ? "btn-recording" : !busy && "btn-primary")}
+        onClick={toggle}
+        disabled={busy}
+      >
+        {recording ? <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> : <Mic2 className="h-4 w-4" />}
+        {busy ? t("stt.testRunning") : recording ? t("stt.testStop") : t("stt.testRecord")}
+      </button>
+
+      {result ? (
+        <div className={cx("rounded-xl border p-3", tone)}>
+          {result.transcript ? (
+            <>
+              <div className="mono-label text-slate-500">{t("stt.testTranscript")}</div>
+              <div className="mt-1.5 text-sm leading-relaxed text-slate-900">{result.transcript}</div>
+            </>
+          ) : null}
+          {result.error ? <div className="text-xs leading-relaxed text-red-600">{result.error}</div> : null}
+          {result.note && !result.transcript ? <div className="text-xs leading-relaxed text-slate-500">{result.note}</div> : null}
+          {typeof result.audio_bytes === "number" || typeof result.elapsed === "number" ? (
+            <div className="mono-label mt-2 flex flex-wrap gap-x-3 gap-y-1 normal-case text-slate-400">
+              {typeof result.audio_bytes === "number" ? <span>{(result.audio_bytes / 1024).toFixed(1)} KB</span> : null}
+              {typeof result.elapsed === "number" ? <span>{result.elapsed}s</span> : null}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mono-label normal-case text-slate-400">{t("stt.testEmpty")}</div>
+      )}
     </div>
   );
 }
@@ -1182,12 +1288,12 @@ function CronSettings({ state, showToast, refresh }) {
       <div className="grid gap-2">
         {jobs.length ? (
           jobs.map((job) => (
-            <div key={job.id} className="rounded-lg border border-slate-200 bg-white p-3">
+            <div key={job.id} className="rounded-xl border border-slate-200 bg-white p-3">
               <div className="flex items-center justify-between gap-3">
-                <div className="truncate text-sm font-semibold">{job.name}</div>
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500">{Math.round(job.every_seconds)}s</span>
+                <div className="truncate text-sm font-semibold text-slate-900">{job.name}</div>
+                <span className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[10px] tabular-nums text-slate-500">{Math.round(job.every_seconds)}s</span>
               </div>
-              <div className="mt-1 text-xs text-slate-500">{job.instruction}</div>
+              <div className="mt-1.5 text-xs leading-relaxed text-slate-500">{job.instruction}</div>
             </div>
           ))
         ) : (
@@ -1224,9 +1330,9 @@ function InfoGrid({ rows }) {
   return (
     <div className="mt-3 grid gap-1.5">
       {rows.map(([key, value]) => (
-        <div key={key} className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 text-xs">
-          <div className="text-slate-500">{key}</div>
-          <div className="truncate text-slate-700">{value}</div>
+        <div key={key} className="grid grid-cols-[92px_minmax(0,1fr)] items-baseline gap-3 text-xs">
+          <div className="font-mono text-[10px] uppercase tracking-wide text-slate-400">{key}</div>
+          <div className="truncate font-mono text-[12px] text-slate-700">{value}</div>
         </div>
       ))}
     </div>
@@ -1235,27 +1341,27 @@ function InfoGrid({ rows }) {
 
 function Metric({ label, value }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
-      <div className="text-lg font-bold">{value}</div>
-      <div className="text-xs text-slate-500">{label}</div>
+    <div className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="font-mono text-2xl font-bold leading-none tabular-nums tracking-tight text-slate-900">{value}</div>
+      <div className="mono-label mt-2">{label}</div>
     </div>
   );
 }
 
 function MemoryRow({ item }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
-      <div className="text-xs font-bold uppercase text-slate-500">{item.kind || "memory"}</div>
-      <div className="mt-1 text-sm text-slate-700">{item.summary || item.text || ""}</div>
+    <div className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="mono-label text-blue-600/70">{item.kind || "memory"}</div>
+      <div className="mt-1.5 text-sm leading-snug text-slate-700">{item.summary || item.text || ""}</div>
     </div>
   );
 }
 
 function SectionTitle({ title, meta }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="text-xs font-bold uppercase text-slate-500">{title}</div>
-      {meta ? <div className="text-xs text-slate-400">{meta}</div> : null}
+    <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2">
+      <div className="mono-label text-slate-500">{title}</div>
+      {meta ? <div className="mono-label normal-case text-slate-400">{meta}</div> : null}
     </div>
   );
 }
@@ -1263,7 +1369,7 @@ function SectionTitle({ title, meta }) {
 function Labeled({ label, children }) {
   return (
     <label className="grid gap-1.5">
-      <span className="text-xs font-bold uppercase text-slate-500">{label}</span>
+      <span className="mono-label text-slate-500">{label}</span>
       {children}
     </label>
   );
@@ -1280,7 +1386,8 @@ function Toggle({ label, checked, onChange }) {
 
 function Empty({ text }) {
   return (
-    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-400">
+    <div className="flex items-center gap-2.5 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-4 py-5 text-sm text-slate-400">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full border border-slate-300" />
       {text}
     </div>
   );

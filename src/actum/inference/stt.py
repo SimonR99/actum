@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import io
+import wave
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -22,6 +23,56 @@ STT_ENGINES = ("whisper", "openai", "model")
 DEFAULT_ENGINE = "whisper"
 DEFAULT_WHISPER_MODEL = "base"
 DEFAULT_OPENAI_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe"
+WHISPER_SAMPLE_RATE = 16000
+
+
+def _wav_b64_to_16k_mono(audio_b64: str):
+    """Decode a base64 WAV into a mono float32 array resampled to 16 kHz.
+
+    faster-whisper's internal (PyAV/av) decoder silently yields *no* audio for
+    some WAV sample rates — notably the 44.1/48 kHz that real microphones and
+    browser recorders produce — so the transcript comes back empty even though
+    the audio is perfectly good. We sidestep that by decoding and resampling
+    ourselves and handing the model a plain 16 kHz float array, which it treats
+    as already-decoded input.
+    """
+    import numpy as np
+
+    raw = base64.b64decode(audio_b64)
+    with wave.open(io.BytesIO(raw), "rb") as wf:
+        sample_rate = wf.getframerate()
+        channels = wf.getnchannels()
+        width = wf.getsampwidth()
+        frames = wf.readframes(wf.getnframes())
+
+    if width == 2:
+        audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+    elif width == 4:
+        audio = np.frombuffer(frames, dtype=np.int32).astype(np.float32) / 2147483648.0
+    elif width == 1:
+        audio = (np.frombuffer(frames, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
+    else:
+        raise ValueError(f"unsupported WAV sample width: {width} bytes")
+
+    if channels > 1:
+        audio = audio.reshape(-1, channels).mean(axis=1)
+
+    if sample_rate != WHISPER_SAMPLE_RATE and audio.size:
+        try:
+            from math import gcd
+
+            from scipy.signal import resample_poly
+
+            g = gcd(int(sample_rate), WHISPER_SAMPLE_RATE)
+            audio = resample_poly(audio, WHISPER_SAMPLE_RATE // g, int(sample_rate) // g)
+        except Exception:
+            # Linear-interpolation fallback (no scipy, or unusual rate).
+            target_len = int(round(audio.size * WHISPER_SAMPLE_RATE / sample_rate))
+            if target_len > 0:
+                idx = np.linspace(0, audio.size - 1, target_len)
+                audio = np.interp(idx, np.arange(audio.size), audio)
+
+    return np.ascontiguousarray(audio, dtype=np.float32)
 
 
 class STTEngine(ABC):
@@ -37,10 +88,17 @@ class WhisperSTT(STTEngine):
 
     name = "whisper"
 
-    def __init__(self, model_size: str = DEFAULT_WHISPER_MODEL, compute_type: str = "auto", device: str = "auto"):
+    def __init__(
+        self,
+        model_size: str = DEFAULT_WHISPER_MODEL,
+        compute_type: str = "auto",
+        device: str = "auto",
+        language: str = "",
+    ):
         self._model_size = model_size or DEFAULT_WHISPER_MODEL
         self._compute_type = "default" if compute_type in ("", "auto") else compute_type
         self._device = device or "auto"
+        self._language = (language or "").strip() or None
         self._model: Any = None
         self._warned_missing = False
 
@@ -70,9 +128,19 @@ class WhisperSTT(STTEngine):
             return ""
 
         try:
-            buffer = io.BytesIO(base64.b64decode(audio_b64))
-            buffer.name = "audio.wav"
-            segments, _ = model.transcribe(buffer)
+            audio = _wav_b64_to_16k_mono(audio_b64)
+            # The energy VAD has already decided this clip contains speech, so we
+            # relax Whisper's own no-speech gate (its default 0.6 discards
+            # borderline real-room utterances) and disable cross-clip context to
+            # avoid hallucinated carry-over between separate commands.
+            segments, _ = model.transcribe(
+                audio,
+                language=self._language,
+                beam_size=5,
+                temperature=0.0,
+                condition_on_previous_text=False,
+                no_speech_threshold=0.85,
+            )
             text = " ".join(segment.text.strip() for segment in segments).strip()
             if text:
                 print(f"[stt] transcript: {text!r}")
@@ -125,6 +193,7 @@ def build_stt(settings: Any) -> STTEngine | None:
             model_size=str(speech.get("whisper_model", DEFAULT_WHISPER_MODEL)),
             compute_type=str(speech.get("whisper_compute", "auto")),
             device=str(speech.get("whisper_device", "auto")),
+            language=str(speech.get("whisper_language", "")),
         )
     if engine == "openai":
         models = settings.to_config(include_secrets=True)["models"]

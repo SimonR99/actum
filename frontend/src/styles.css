@@ -2,7 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  Actum — "Blueprint Instrument"
+  Refined light technical console: paper + faint blueprint grid, hairline-ruled
+  white panels, ink typography (Hanken Grotesk), monospace technical labels
+  (JetBrains Mono), one sharp cobalt accent reserved for active / primary state.
+*/
+
 @layer base {
+  :root {
+    --paper: #f1f2f4;
+    --grid-line: rgba(21, 24, 29, 0.04);
+  }
+
   html,
   body,
   #root {
@@ -11,57 +23,120 @@
 
   body {
     margin: 0;
-    background: #f4f6f8;
-    color: #17202a;
+    color: #15181d;
+    background-color: var(--paper);
+    /* Atmospheric cobalt wash from the top, over a fine blueprint grid. */
+    background-image:
+      radial-gradient(1100px 560px at 78% -12%, rgba(31, 68, 245, 0.07), transparent 62%),
+      radial-gradient(900px 520px at 0% 110%, rgba(17, 163, 123, 0.05), transparent 60%),
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01", "cv01";
   }
 
   button,
   input,
-  select {
+  select,
+  textarea {
     font: inherit;
     letter-spacing: 0;
+  }
+
+  ::selection {
+    background: rgba(31, 68, 245, 0.18);
+  }
+
+  /* Slim, restrained scrollbars befitting an instrument. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #cdd2da transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: #d2d6dd;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: #b6bcc6;
+    background-clip: padding-box;
   }
 }
 
 @layer components {
+  /* ── Surfaces ─────────────────────────────────────────────────────────── */
   .panel {
-    @apply min-h-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-panel;
+    @apply relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-panel;
+  }
+
+  /* A whisper-thin cobalt registration line along the panel's top edge. */
+  .panel::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(31, 68, 245, 0.32), transparent);
+    opacity: 0.55;
+    pointer-events: none;
   }
 
   .panel-header {
-    @apply flex min-h-11 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3;
+    @apply flex min-h-[3rem] items-center justify-between gap-3 border-b border-slate-200 bg-white/60 px-4 py-3 backdrop-blur-sm;
   }
 
   .panel-title {
-    @apply text-xs font-bold uppercase tracking-normal text-slate-700;
+    @apply font-mono text-[11px] font-semibold uppercase tracking-label text-slate-700;
   }
 
   .panel-meta {
-    @apply truncate text-xs text-slate-500;
+    @apply truncate font-mono text-[11px] tabular-nums text-slate-400;
   }
 
+  /* Monospace technical micro-label — the signature instrument typographic mark. */
+  .mono-label {
+    @apply font-mono text-[10px] font-semibold uppercase tracking-label text-slate-400;
+  }
+
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white p-4;
+  }
+
+  .card-inset {
+    @apply rounded-xl border border-slate-200 bg-slate-50 p-4;
+  }
+
+  /* ── Controls ─────────────────────────────────────────────────────────── */
   .field {
-    @apply h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100;
+    @apply h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100;
   }
 
   .btn {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 active:scale-[0.99];
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 shadow-sm transition hover:-translate-y-px hover:border-slate-300 hover:bg-slate-50 active:translate-y-0 active:scale-[0.99];
   }
 
   .btn-primary {
-    @apply border-blue-600 bg-blue-600 text-white hover:bg-blue-700;
+    @apply border-blue-600 bg-blue-600 text-white shadow-[0_8px_18px_-8px_rgba(31,68,245,0.7)] hover:border-blue-700 hover:bg-blue-700;
   }
 
   .btn-recording {
-    @apply border-rose-600 bg-rose-600 text-white hover:bg-rose-700;
+    @apply border-rose-600 bg-rose-600 text-white shadow-[0_8px_18px_-8px_rgba(216,68,58,0.7)] hover:bg-rose-700;
   }
 
   .btn-quiet {
-    @apply border-transparent bg-slate-100 text-slate-700 hover:bg-slate-200;
+    @apply border-transparent bg-slate-100 text-slate-700 shadow-none hover:bg-slate-200;
   }
 
+  /* ── Status chips ─────────────────────────────────────────────────────── */
   .chip {
-    @apply inline-flex h-7 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600;
+    @apply inline-flex h-7 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 font-mono text-[11px] font-medium tabular-nums tracking-tight text-slate-600;
   }
 
   .chip-ok {
@@ -73,7 +148,7 @@
   }
 }
 
-/* Markdown rendering inside assistant chat bubbles */
+/* ── Markdown rendering inside assistant chat bubbles ─────────────────────── */
 .md > :first-child {
   margin-top: 0;
 }
@@ -82,7 +157,7 @@
 }
 .md p {
   margin: 0.4rem 0;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 .md h1,
 .md h2,
@@ -90,6 +165,7 @@
   margin: 0.6rem 0 0.3rem;
   font-weight: 700;
   line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 .md h1 {
   font-size: 1.05rem;
@@ -115,21 +191,22 @@
   margin: 0.15rem 0;
 }
 .md a {
-  color: #2563eb;
+  color: #1f44f5;
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .md code {
-  background: #f1f5f9;
-  border-radius: 4px;
-  padding: 0.1rem 0.3rem;
+  background: #eef0f3;
+  border-radius: 5px;
+  padding: 0.1rem 0.35rem;
   font-size: 0.85em;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .md pre {
-  background: #0f172a;
-  color: #e2e8f0;
-  border-radius: 8px;
-  padding: 0.7rem 0.85rem;
+  background: #0b0d11;
+  color: #e3e6eb;
+  border-radius: 12px;
+  padding: 0.8rem 0.95rem;
   margin: 0.5rem 0;
   overflow-x: auto;
   font-size: 0.82em;
@@ -140,10 +217,10 @@
   padding: 0;
 }
 .md blockquote {
-  border-left: 3px solid #cbd5e1;
+  border-left: 2px solid #1f44f5;
   margin: 0.5rem 0;
   padding-left: 0.75rem;
-  color: #475569;
+  color: #4c535e;
 }
 .md table {
   border-collapse: collapse;
@@ -152,7 +229,13 @@
 }
 .md th,
 .md td {
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e3e6eb;
   padding: 0.3rem 0.5rem;
   text-align: left;
+}
+.md th {
+  background: #f7f8fa;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.92em;
+  font-weight: 600;
 }

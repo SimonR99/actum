@@ -338,6 +338,20 @@ frontend/
 
 ## Development
 
+A `Makefile` wraps the common tasks — run `make` to list them:
+
+```bash
+make install-all   # editable install with every stack (dev, camera, openai, whisper, mcp)
+make frontend      # build the dashboard into frontend/dist
+make server        # run the agent + dashboard
+make test          # run the test suite
+make up            # build and run everything in Docker
+```
+
+Override the interpreter with `make <target> PYTHON=~/miniconda3/bin/python`.
+
+Equivalent raw commands:
+
 ```bash
 PYTHONPATH=src pytest -q
 python -m compileall -q src tests

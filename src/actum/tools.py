@@ -20,6 +20,16 @@ from actum.integrations.web import fetch_text
 if TYPE_CHECKING:
     from actum.agent import RobotAgent
 
+# Gemma 4's tool-call serialization wraps string values with <|"|> delimiters.
+# litert_lm passes these through to Python callables instead of stripping them.
+_GEMMA_TOKENS = ('<|"|>',)
+
+
+def _clean(text: str) -> str:
+    for tok in _GEMMA_TOKENS:
+        text = text.replace(tok, "")
+    return text
+
 
 class RobotTools:
     """All tools available to the robot agent LLM."""
@@ -66,6 +76,7 @@ class RobotTools:
         Args:
             summary: One sentence describing what was accomplished.
         """
+        summary = _clean(summary)
         action = self._record("done", summary=summary)
         runtime = getattr(self._agent, "runtime", None)
         if runtime is not None:
@@ -149,6 +160,7 @@ class RobotTools:
         Args:
             text: What to say. 1-2 sentences max. Do not repeat yourself.
         """
+        text = _clean(text)
         self._agent._pending_speech.append(text)
         self._record("speak", text=text)
         print(f"[speak] {text!r}")

@@ -119,6 +119,14 @@ const STRINGS = {
     "stt.whisper": "Whisper (local)",
     "stt.openai": "OpenAI (cloud)",
     "stt.model": "Modèle multimodal",
+    // transcription test
+    "stt.test": "Test de transcription",
+    "stt.testHint": "Enregistrez quelques secondes de parole pour vérifier le moteur STT, indépendamment de l'agent.",
+    "stt.testRecord": "Enregistrer",
+    "stt.testStop": "Arrêter et transcrire",
+    "stt.testRunning": "Transcription en cours…",
+    "stt.testEmpty": "Aucun résultat pour le moment.",
+    "stt.testTranscript": "Transcription",
     // tools settings
     "tools.save": "Enregistrer la sélection d'outils",
     // cron settings
@@ -237,6 +245,13 @@ const STRINGS = {
     "stt.whisper": "Whisper (local)",
     "stt.openai": "OpenAI (cloud)",
     "stt.model": "Multimodal model",
+    "stt.test": "Transcription test",
+    "stt.testHint": "Record a few seconds of speech to check the STT engine, independent of the agent.",
+    "stt.testRecord": "Record",
+    "stt.testStop": "Stop & transcribe",
+    "stt.testRunning": "Transcribing…",
+    "stt.testEmpty": "No result yet.",
+    "stt.testTranscript": "Transcript",
     "tools.save": "Save tool selection",
     "cron.name": "Name",
     "cron.everySeconds": "Every seconds",
