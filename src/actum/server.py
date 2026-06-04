@@ -51,7 +51,7 @@ class CameraFrameStream:
 
     def __init__(self, agent: RobotAgent):
         self.agent = agent
-        self.interval_s = _camera_stream_interval()
+        self.interval_s = _camera_stream_interval(agent)
         self.width = _camera_stream_width()
         self.quality = _camera_stream_quality()
         self.drain_frames = _camera_stream_drain_frames()
@@ -104,6 +104,7 @@ class CameraFrameStream:
 
 def attach_server(agent: RobotAgent, app: FastAPI):
     """Wire monitoring routes onto a FastAPI app."""
+    _init_server_state(app)
     if not hasattr(app.state, "camera_stream"):
         app.state.camera_stream = CameraFrameStream(agent)
     camera_stream: CameraFrameStream = app.state.camera_stream
@@ -120,6 +121,9 @@ def attach_server(agent: RobotAgent, app: FastAPI):
 
     @app.post("/command")
     async def command(body: dict):
+        not_ready = _not_ready_response(app)
+        if not_ready:
+            return not_ready
         text = (body.get("text") or "").strip()
         if not text:
             return JSONResponse({"error": "empty command"}, status_code=400)
@@ -128,6 +132,9 @@ def attach_server(agent: RobotAgent, app: FastAPI):
 
     @app.post("/trigger/{source}")
     async def trigger(source: str, body: dict | None = None):
+        not_ready = _not_ready_response(app)
+        if not_ready:
+            return not_ready
         body = body or {}
         source = source.strip().lower()
         if source not in {"vision", "chat", "language", "voice", "timer", "cron"}:
@@ -143,6 +150,9 @@ def attach_server(agent: RobotAgent, app: FastAPI):
             image = agent.capture_frame()
         if image:
             event["image"] = image
+        audio = body.get("audio")
+        if audio:
+            event["audio"] = str(audio)
         await agent.event_bus.put(event)
         return {"queued": event["source"]}
 
@@ -151,6 +161,7 @@ def attach_server(agent: RobotAgent, app: FastAPI):
         return {
             "name": agent.get_name(),
             "mode": agent.get_mode(),
+            "server": _server_status(app),
             "backend": agent.runtime.backend.name,
             "robot_config": agent.config.get("robot", {}),
             "hardware_connected": agent.runtime.backend.connected,
@@ -162,9 +173,15 @@ def attach_server(agent: RobotAgent, app: FastAPI):
     async def capabilities_get():
         return {"capabilities": agent.runtime.capabilities.list()}
 
+    @app.get("/health")
+    async def health_get():
+        status = _server_status(app)
+        status_code = 200 if status["ready"] else 503
+        return JSONResponse(status, status_code=status_code)
+
     @app.get("/state")
     async def state_get():
-        return agent.runtime.snapshot()
+        return _state_snapshot(agent, app)
 
     @app.post("/settings/mode")
     async def settings_mode(body: dict):
@@ -227,6 +244,14 @@ def attach_server(agent: RobotAgent, app: FastAPI):
             status_code=200 if ok else 400,
         )
 
+    @app.post("/settings/profile")
+    async def settings_profile(body: dict):
+        ok, message = agent.set_profile(body.get("profile", ""), persist=bool(body.get("persist", True)))
+        return JSONResponse(
+            {"ok": ok, "message": message, "profile": agent.runtime.profiles.to_dict()},
+            status_code=200 if ok else 400,
+        )
+
     @app.post("/settings/tool")
     async def settings_tool(body: dict):
         ok, message = agent.set_tool_enabled(
@@ -267,7 +292,7 @@ def attach_server(agent: RobotAgent, app: FastAPI):
 
         # Send current state on connect
         await ws.send_text(json.dumps({"type": "memory", "data": agent.runtime.memory.snapshot()}))
-        await ws.send_text(json.dumps({"type": "state", "data": agent.runtime.snapshot()}))
+        await ws.send_text(json.dumps({"type": "state", "data": _state_snapshot(agent, app)}))
         await ws.send_text(
             json.dumps(
                 {
@@ -305,7 +330,7 @@ def attach_server(agent: RobotAgent, app: FastAPI):
                         )
                     )
                     await ws.send_text(json.dumps({"type": "memory", "data": agent.runtime.memory.snapshot()}))
-                    await ws.send_text(json.dumps({"type": "state", "data": agent.runtime.snapshot()}))
+                    await ws.send_text(json.dumps({"type": "state", "data": _state_snapshot(agent, app)}))
 
                 await send_latest_frame()
         except WebSocketDisconnect:
@@ -315,42 +340,114 @@ def attach_server(agent: RobotAgent, app: FastAPI):
                 agent._status_subscribers.remove(q)
 
 
+def _init_server_state(app: FastAPI):
+    if not hasattr(app.state, "agent_status"):
+        app.state.agent_status = "starting"
+    if not hasattr(app.state, "agent_ready"):
+        app.state.agent_ready = False
+    if not hasattr(app.state, "agent_error"):
+        app.state.agent_error = ""
+
+
+def _set_server_status(app: FastAPI, status: str, ready: bool, error: str = ""):
+    app.state.agent_status = status
+    app.state.agent_ready = ready
+    app.state.agent_error = error
+
+
+def _server_status(app: FastAPI) -> dict:
+    _init_server_state(app)
+    port = int(os.environ.get("PORT", "8000"))
+    return {
+        "ready": bool(app.state.agent_ready),
+        "status": str(app.state.agent_status),
+        "error": str(app.state.agent_error),
+        "port": port,
+    }
+
+
+def _state_snapshot(agent: RobotAgent, app: FastAPI) -> dict:
+    snapshot = agent.runtime.snapshot()
+    snapshot["server"] = _server_status(app)
+    return snapshot
+
+
+def _not_ready_response(app: FastAPI) -> JSONResponse | None:
+    status = _server_status(app)
+    if status["ready"]:
+        return None
+    message = "Agent runtime is still loading." if status["status"] != "failed" else f"Agent startup failed: {status['error']}"
+    return JSONResponse({"error": message, "server": status}, status_code=503)
+
+
 # ── Lifespan ───────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     loop = asyncio.get_event_loop()
     agent: RobotAgent = app.state.agent
-
-    print("Loading models…")
-    await loop.run_in_executor(None, agent.load_models)
     camera_stream: CameraFrameStream | None = getattr(app.state, "camera_stream", None)
-    if camera_stream:
-        camera_stream.start()
+    _init_server_state(app)
 
-    def on_speech(wav_b64: str):
-        event: dict = {"source": "language", "audio": wav_b64}
-        frame = agent.capture_frame()
-        if frame:
-            event["image"] = frame
-        loop.call_soon_threadsafe(agent.event_bus.put_nowait, event)
+    async def start_runtime():
+        _set_server_status(app, "loading", ready=False)
+        agent.runtime.events.append("server.loading", "server", message="Loading models and hardware.")
+        print("Loading models…")
+        try:
+            await loop.run_in_executor(None, agent.load_models)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            message = str(exc)
+            _set_server_status(app, "failed", ready=False, error=message)
+            agent.runtime.events.append("server.failed", "server", message=message, error=message)
+            print(f"[server] startup failed: {message}")
+            agent._broadcast({"source": "server", "actions": [], "elapsed": 0.0, "state_only": True})
+            return
 
-    mic = AudioCapture(on_speech)
-    threading.Thread(target=mic.run, daemon=True).start()
+        if camera_stream:
+            camera_stream.start()
 
-    agent_task = asyncio.create_task(agent.run())
-    background_task = asyncio.create_task(agent.background_loop())
+        def on_speech(wav_b64: str):
+            event: dict = {"source": "language", "audio": wav_b64}
+            frame = agent.capture_frame()
+            if frame:
+                event["image"] = frame
+            loop.call_soon_threadsafe(agent.event_bus.put_nowait, event)
+
+        mic = AudioCapture(on_speech)
+        app.state.mic = mic
+        threading.Thread(target=mic.run, daemon=True).start()
+
+        app.state.agent_task = asyncio.create_task(agent.run())
+        app.state.background_task = asyncio.create_task(agent.background_loop())
+        _set_server_status(app, "ready", ready=True, error="")
+        agent.runtime.events.append("server.ready", "server", message="Agent runtime ready.")
+        agent._broadcast({"source": "server", "actions": [], "elapsed": 0.0, "state_only": True})
+
+    app.state.startup_task = asyncio.create_task(start_runtime())
     yield
 
     if camera_stream:
         camera_stream.stop()
-    mic.stop()
+    mic: AudioCapture | None = getattr(app.state, "mic", None)
+    if mic:
+        mic.stop()
     agent.stop_background_loop()
-    background_task.cancel()
-    with suppress(asyncio.CancelledError):
-        await background_task
-    await agent.event_bus.put(None)
-    await agent_task
+    background_task: asyncio.Task | None = getattr(app.state, "background_task", None)
+    if background_task:
+        background_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await background_task
+    agent_task: asyncio.Task | None = getattr(app.state, "agent_task", None)
+    if agent_task:
+        await agent.event_bus.put(None)
+        await agent_task
+    startup_task: asyncio.Task | None = getattr(app.state, "startup_task", None)
+    if startup_task and not startup_task.done():
+        startup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await startup_task
     agent.shutdown()
 
 
@@ -367,68 +464,37 @@ def cli():
     uvicorn.run(app, host="0.0.0.0", port=port)
 
 
-def _camera_stream_interval() -> float:
-    raw = _env_first(
-        "ACTUM_CAMERA_STREAM_INTERVAL_S",
-        "SENSORIMOTOR_CAMERA_STREAM_INTERVAL_S",
-        "ROBO_CAMERA_STREAM_INTERVAL_S",
-    )
-    if raw is None:
-        fps = _env_float(
-            ("ACTUM_CAMERA_STREAM_FPS", "SENSORIMOTOR_CAMERA_STREAM_FPS", "ROBO_CAMERA_STREAM_FPS"),
-            6.7,
-            1.0,
-            20.0,
-        )
-        return 1.0 / fps
-    try:
-        value = float(raw)
-    except ValueError:
-        value = 0.15
-    return max(0.05, min(1.0, value))
+def _camera_stream_interval(agent: RobotAgent) -> float:
+    """Frame interval for the dashboard stream.
+
+    Defaults to the active speed profile's camera_fps; ACTUM_CAMERA_STREAM_*
+    env vars override it for one-off tuning.
+    """
+    raw = os.environ.get("ACTUM_CAMERA_STREAM_INTERVAL_S")
+    if raw is not None:
+        try:
+            return max(0.05, min(1.0, float(raw)))
+        except ValueError:
+            pass
+    profile_fps = getattr(getattr(agent, "runtime", None), "camera_fps", 6.7)
+    fps = _env_float("ACTUM_CAMERA_STREAM_FPS", float(profile_fps), 1.0, 20.0)
+    return 1.0 / fps
 
 
 def _camera_stream_width() -> int:
-    return _env_int(
-        ("ACTUM_CAMERA_STREAM_WIDTH", "SENSORIMOTOR_CAMERA_STREAM_WIDTH", "ROBO_CAMERA_STREAM_WIDTH"),
-        320,
-        160,
-        1280,
-    )
+    return _env_int("ACTUM_CAMERA_STREAM_WIDTH", 320, 160, 1280)
 
 
 def _camera_stream_quality() -> int:
-    return _env_int(
-        ("ACTUM_CAMERA_STREAM_QUALITY", "SENSORIMOTOR_CAMERA_STREAM_QUALITY", "ROBO_CAMERA_STREAM_QUALITY"),
-        60,
-        30,
-        95,
-    )
+    return _env_int("ACTUM_CAMERA_STREAM_QUALITY", 60, 30, 95)
 
 
 def _camera_stream_drain_frames() -> int:
-    return _env_int(
-        (
-            "ACTUM_CAMERA_STREAM_DRAIN_FRAMES",
-            "SENSORIMOTOR_CAMERA_STREAM_DRAIN_FRAMES",
-            "ROBO_CAMERA_STREAM_DRAIN_FRAMES",
-        ),
-        2,
-        0,
-        8,
-    )
+    return _env_int("ACTUM_CAMERA_STREAM_DRAIN_FRAMES", 2, 0, 8)
 
 
-def _env_first(*names: str) -> str | None:
-    for name in names:
-        value = os.environ.get(name)
-        if value is not None:
-            return value
-    return None
-
-
-def _env_float(names: tuple[str, ...], default: float, minimum: float, maximum: float) -> float:
-    raw = _env_first(*names)
+def _env_float(name: str, default: float, minimum: float, maximum: float) -> float:
+    raw = os.environ.get(name)
     if raw is None:
         return default
     try:
@@ -438,8 +504,8 @@ def _env_float(names: tuple[str, ...], default: float, minimum: float, maximum: 
     return max(minimum, min(maximum, value))
 
 
-def _env_int(names: tuple[str, ...], default: int, minimum: int, maximum: int) -> int:
-    raw = _env_first(*names)
+def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    raw = os.environ.get(name)
     if raw is None:
         return default
     try:

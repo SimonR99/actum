@@ -31,14 +31,10 @@ from typing import Any
 import numpy as np
 
 from actum import tts as tts_module
+from actum.inference import InferenceProvider, build_provider
 from actum.runtime import RobotRuntime
 from actum.tools import RobotTools
 from actum.perception import AudioCapture, open_camera, capture_jpeg
-
-try:
-    import litert_lm
-except ImportError:
-    litert_lm = None
 
 
 # ── Model config ───────────────────────────────────────────────────────────────
@@ -91,9 +87,9 @@ class RobotAgent:
 
     def __init__(self, config_path: str | Path | None = None):
         self._config_path = Path(config_path) if config_path else Path(__file__).resolve().parents[2] / "config.json"
+        _load_dotenv(self._config_path.parent)
         self.config = _load_config(self._config_path)
-        self.engine: litert_lm.Engine | None = None
-        self.conversation = None
+        self.provider: InferenceProvider | None = None
         self.tts_backend: tts_module.TTSBackend | None = None
         self.tools: RobotTools | None = None
         self.runtime = RobotRuntime(self.config, self.get_name())
@@ -113,46 +109,42 @@ class RobotAgent:
         self._camera = None
         self._camera_lock = threading.Lock()
         self._background_stop_requested = False
+        self._last_deliberate_at = 0.0
 
     # ── Startup / shutdown ─────────────────────────────────────────────────
 
     def load_models(self):
-        """Load LLM + TTS and wire up tools. Blocking — run via executor."""
-        if litert_lm is None:
-            raise RuntimeError(
-                "litert-lm is not installed. Install project dependencies with "
-                "`pip install -e .` before starting the agent."
-            )
+        """Load the inference provider + TTS and wire up tools.
 
-        model_path = _resolve_model_path()
-
-        print(f"Loading LLM from {model_path}…")
-        self.engine = litert_lm.Engine(
-            model_path,
-            backend=litert_lm.Backend.GPU,
-            vision_backend=litert_lm.Backend.GPU,
-            audio_backend=litert_lm.Backend.CPU,
-        )
-        self.engine.__enter__()
-
+        Blocking — run via executor. The active provider (local LiteRT, OpenAI,
+        …) and its compute backend come from the active speed profile.
+        """
         self.tts_backend = tts_module.load()
         self.tools = RobotTools(self)
         system_prompt = _build_system_prompt(self.config, self.runtime)
-        self.conversation = self.engine.create_conversation(
-            messages=[{"role": "system", "content": system_prompt}],
-            tools=self.tools.get_tools(),
+
+        self.provider = build_provider(
+            self.runtime.settings,
+            compute=self.runtime.compute_backend,
+            pop_pending_frame=self._pop_pending_frame,
+            resolve_model_path=_resolve_model_path,
         )
-        self.conversation.__enter__()
+        print(f"Starting inference provider: {self.provider.name}…")
+        self.provider.start(system_prompt, self.tools.get_tools())
 
         self._camera = open_camera()
         self._init_backend()
         print("Robot agent ready.")
 
+    def _pop_pending_frame(self) -> str | None:
+        """Hand the most recent look() frame to the provider, then clear it."""
+        frame = self._pending_frame
+        self._pending_frame = None
+        return frame
+
     def shutdown(self):
-        if self.conversation:
-            self.conversation.__exit__(None, None, None)
-        if self.engine:
-            self.engine.__exit__(None, None, None)
+        if self.provider:
+            self.provider.close()
         if self._camera:
             with self._camera_lock:
                 self._camera.release()
@@ -179,9 +171,9 @@ class RobotAgent:
         """Process one triggering event through the agentic tool-calling loop.
 
         The LLM receives the event and calls tools in sequence (look, navigate,
-        speak, remember, …) until it calls done(). All of this happens within
-        a single conversation.send_message() call — litert_lm + Gemma 4 handle
-        the multi-step tool loop internally.
+        speak, remember, …) until it calls done(). The active InferenceProvider
+        runs the multi-step tool loop (internally for LiteRT/Gemma, or by driving
+        the API loop for cloud providers like OpenAI).
 
         Event dict keys:
             source  : 'voice' | 'vision' | 'text' | 'timer'
@@ -214,24 +206,12 @@ class RobotAgent:
         content = self._build_content(event)
         t0 = time.time()
 
+        # The provider runs the full tool-calling loop, including any look()
+        # image follow-ups (it pops frames via self._pop_pending_frame).
         await asyncio.get_event_loop().run_in_executor(
             None,
-            lambda: self.conversation.send_message({"role": "user", "content": content}),
+            lambda: self.provider.send(content),
         )
-
-        # If the LLM called look(), _pending_frame is now set. We can't inject an
-        # image mid-inference, so we do one follow-up message with the actual frame.
-        if self._pending_frame:
-            frame = self._pending_frame
-            self._pending_frame = None
-            follow_up = [
-                {"type": "image", "blob": frame},
-                {"type": "text", "text": "This is the camera frame you requested with look(). Describe what you see and continue your task."},
-            ]
-            await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: self.conversation.send_message({"role": "user", "content": follow_up}),
-            )
 
         elapsed = time.time() - t0
         action_types = [a["type"] for a in self.tools.actions_taken]
@@ -291,6 +271,11 @@ class RobotAgent:
                 "Then use any other tools needed to accomplish the request. "
                 "Always call done() last."
             )
+        elif src == "language" and event.get("audio"):
+            instruction = (
+                "The user spoke to you through a microphone. Listen to the attached audio, "
+                "respond or act through tools as needed, then call done()."
+            )
         elif src == "language":
             instruction = (
                 "A language/voice command was transcribed for you. Respond or act through tools as needed, "
@@ -316,15 +301,27 @@ class RobotAgent:
                 f"Background autonomy loop tick. {event.get('text', 'Keep waiting and maintain situational awareness.')} "
                 "Update the behavior tree. Only use disruptive tools if needed. Call done() when finished."
             )
+        elif src == "deliberate":
+            instruction = (
+                "Self-directed planning tick. Review your standing goals, recent memory, and what you know "
+                "about the environment. Use search_memory() to recall anything relevant. "
+                "If there is something useful and safe you could proactively do or prepare, set a plan with "
+                "set_plan() and pursue it. If a recurring check would help, create it with schedule_job(). "
+                "If nothing is needed right now, note your reasoning briefly with report_status(). "
+                "Always call done() when finished."
+            )
         else:
             txt = event.get("text", "Perform a brief environment check.")
             instruction = f"{txt} Use your tools as needed, then call done()."
 
         instruction += companion_note
 
-        memory_context = self.runtime.memory.context()
+        # Retrieve memory relevant to this turn instead of dumping the whole
+        # store, so the prompt stays focused as memory grows.
+        query = str(event.get("text", "")).strip()
+        memory_context = self.runtime.memory.context(query=query or None)
         if memory_context:
-            instruction += f"\n\nRelevant memory:\n{memory_context}"
+            instruction += f"\n\n{memory_context}"
 
         content.append({"type": "text", "text": instruction})
         return content
@@ -363,12 +360,7 @@ class RobotAgent:
         sr = self.tts_backend.sample_rate
         try:
             import sounddevice as sd
-            device = (
-                os.environ.get("ACTUM_AUDIO_DEVICE")
-                or os.environ.get("SENSORIMOTOR_AUDIO_DEVICE")
-                or os.environ.get("ROBO_AUDIO_DEVICE")
-                or None
-            )
+            device = os.environ.get("ACTUM_AUDIO_DEVICE") or None
             await asyncio.get_event_loop().run_in_executor(
                 None, lambda: sd.play(pcm, samplerate=sr, device=device, blocking=True)
             )
@@ -416,6 +408,9 @@ class RobotAgent:
             if self._background_stop_requested:
                 break
 
+            # Self-maintenance: keep memory tidy without operator involvement.
+            self.runtime.maybe_consolidate_memory()
+
             queued = False
             for job in self.runtime.cron.due():
                 self.runtime.cron.mark_run(job.id)
@@ -431,6 +426,28 @@ class RobotAgent:
                 queued = True
 
             idle = self.runtime.intent.status in {"idle", "done", "blocked"} or not self.runtime.intent.goal
+
+            # Self-directed deliberation: when idle, periodically let the robot
+            # review its goals/memory and set its own task.
+            deliberate_seconds = self.runtime.deliberate_seconds
+            if (
+                idle
+                and behavior.enabled
+                and not queued
+                and deliberate_seconds > 0
+                and self.event_bus.empty()
+                and (time.time() - self._last_deliberate_at) >= deliberate_seconds
+            ):
+                self._last_deliberate_at = time.time()
+                behavior.tick("deliberate", "Reviewing goals and memory for useful next steps.", "deliberate")
+                await self.event_bus.put(
+                    {
+                        "source": "deliberate",
+                        "text": "Decide if there is something useful and safe to do or prepare right now.",
+                        "force": True,
+                    }
+                )
+                queued = True
             if (
                 idle
                 and behavior.enabled
@@ -518,6 +535,18 @@ class RobotAgent:
             except Exception as exc:
                 return False, f"Model settings changed in memory but failed to save config: {exc}"
         return True, f"Model provider set to {provider}."
+
+    def set_profile(self, profile: str, persist: bool = True) -> tuple[bool, str]:
+        ok, message = self.runtime.set_profile(profile)
+        if not ok:
+            return False, message
+        self.config["active_profile"] = self.runtime.profiles.active_name
+        if persist:
+            try:
+                _persist_config_updates(self._config_path, {"active_profile": self.runtime.profiles.active_name})
+            except Exception as exc:
+                return False, f"Profile changed in memory but failed to save config: {exc}"
+        return True, message
 
     def set_tool_enabled(self, tool: str, enabled: bool, persist: bool = False) -> tuple[bool, str]:
         try:
@@ -692,6 +721,32 @@ def _format_string_list(value) -> str:
     return ", ".join(items)
 
 
+def _load_dotenv(start_dir: Path) -> None:
+    """Load KEY=VALUE pairs from a .env file into the environment.
+
+    Searches the given directory and its parents for a .env (so API keys like
+    OPENAI_API_KEY work without exporting them). Existing environment variables
+    are never overwritten.
+    """
+    for directory in [start_dir, *start_dir.parents]:
+        env_path = directory / ".env"
+        if not env_path.exists():
+            continue
+        try:
+            for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+        except Exception as exc:
+            print(f"[config] Failed to read {env_path}: {exc}")
+        return
+
+
 def _load_config(config_path: str | Path | None = None) -> dict:
     """Load runtime config with sensible defaults.
 
@@ -715,10 +770,7 @@ def _load_config(config_path: str | Path | None = None) -> dict:
     if not isinstance(raw, dict):
         return default
 
-    cfg = _merge_dict(default, raw)
-    if "robot" not in raw and cfg.get("hardware", {}).get("enabled"):
-        cfg["robot"]["backend"] = ""
-    return cfg
+    return _merge_dict(default, raw)
 
 
 def _default_config() -> dict:
@@ -758,6 +810,33 @@ def _default_config() -> dict:
             "idle_importance": 0.2,
             "force_idle_reviews": False,
         },
+        "active_profile": "balanced",
+        "profiles": {
+            "fast": {
+                "provider": "openai",
+                "compute": "gpu",
+                "tick_seconds": 6,
+                "idle_review_seconds": 20,
+                "camera_fps": 10,
+                "deliberate_seconds": 120,
+            },
+            "balanced": {
+                "provider": "local",
+                "compute": "gpu",
+                "tick_seconds": 15,
+                "idle_review_seconds": 45,
+                "camera_fps": 6.7,
+                "deliberate_seconds": 240,
+            },
+            "power_saver": {
+                "provider": "local",
+                "compute": "cpu",
+                "tick_seconds": 30,
+                "idle_review_seconds": 120,
+                "camera_fps": 3,
+                "deliberate_seconds": 600,
+            },
+        },
         "cron": [],
         "models": {
             "active_provider": "local",
@@ -768,7 +847,7 @@ def _default_config() -> dict:
                 },
                 "openai": {
                     "enabled": False,
-                    "model": "",
+                    "model": "gpt-4o-mini",
                     "api_key_env": "OPENAI_API_KEY",
                 },
                 "anthropic": {
@@ -786,6 +865,7 @@ def _default_config() -> dict:
             "enabled": True,
             "path": "data/memory.json",
             "max_episodes": 1000,
+            "consolidate_seconds": 300,
         },
         "robot": {
             "backend": "laptop",
@@ -809,13 +889,6 @@ def _default_config() -> dict:
         "mcp": {
             "enabled": False,
             "servers": {},
-        },
-        "hardware": {
-            "enabled": False,
-            "type": "unitree_g1",
-            "network_interface": "eth0",
-            "speaker_id": 0,
-            "volume": 80,
         },
     }
 

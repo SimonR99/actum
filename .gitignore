@@ -88,6 +88,11 @@ tmp/
 temp/
 
 # ------------------------------
+# Runtime-generated robot memory store
+# ------------------------------
+data/memory.json
+
+# ------------------------------
 # Project-specific generated artifact seen in workspace
 # ------------------------------
 default.profraw

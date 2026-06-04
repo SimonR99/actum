@@ -12,7 +12,6 @@ Camera notes (Jetson):
 Audio notes (Jetson):
   - sounddevice uses ALSA. If the default device is wrong, set
     ACTUM_AUDIO_DEVICE to the device name or index, e.g. "hw:1,0".
-    Legacy SENSORIMOTOR_* and ROBO_* variables are still accepted for older deployments.
 """
 
 import base64
@@ -49,15 +48,9 @@ def _is_jetson() -> bool:
     return platform.machine() == "aarch64" and Path("/etc/nv_tegra_release").exists()
 
 
-def _env(name: str, legacy_name: str | None = None, default: str | None = None) -> str | None:
-    sensorimotor_name = name.replace("ACTUM_", "SENSORIMOTOR_", 1)
-    for candidate in (name, sensorimotor_name, legacy_name):
-        if not candidate:
-            continue
-        value = os.environ.get(candidate)
-        if value is not None:
-            return value
-    return default
+def _env(name: str, default: str | None = None) -> str | None:
+    value = os.environ.get(name)
+    return value if value is not None else default
 
 
 # ── Camera ─────────────────────────────────────────────────────────────────────
@@ -79,7 +72,7 @@ def open_camera(source: str | int | None = None):
         return None
 
     if source is None:
-        source = _env("ACTUM_CAMERA", "ROBO_CAMERA", "auto")
+        source = _env("ACTUM_CAMERA", "auto")
 
     if source == "auto":
         source = "csi" if _is_jetson() else 0
@@ -122,7 +115,7 @@ def capture_jpeg(cam, width: int = 320, quality: int = 70, drain_frames: int | N
     try:
         import cv2
         if drain_frames is None:
-            drain_frames = _env_int("ACTUM_CAMERA_DRAIN_FRAMES", "ROBO_CAMERA_DRAIN_FRAMES", 1, 0, 5)
+            drain_frames = _env_int("ACTUM_CAMERA_DRAIN_FRAMES", 1, 0, 5)
         for _ in range(max(0, drain_frames)):
             cam.grab()
         ok, frame = cam.read()
@@ -147,8 +140,8 @@ def _configure_low_latency_camera(cam):
         pass
 
 
-def _env_int(name: str, legacy_name: str | None, default: int, minimum: int, maximum: int) -> int:
-    value = _env(name, legacy_name)
+def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    value = _env(name)
     if value is None:
         return default
     try:
@@ -204,7 +197,7 @@ class EnergyVAD:
         speech_thr = self._noise_floor * self.speech_ratio
         silence_thr = self._noise_floor * self.silence_ratio
 
-        if _env("ACTUM_VAD_DEBUG", "ROBO_VAD_DEBUG"):
+        if _env("ACTUM_VAD_DEBUG"):
             print(
                 f"[vad] rms={rms:.4f} floor={self._noise_floor:.4f} "
                 f"s_thr={speech_thr:.4f} q_thr={silence_thr:.4f} "
@@ -276,9 +269,12 @@ class AudioCapture:
             import sounddevice as sd
         except Exception as e:
             print(f"[mic] audio input unavailable ({e}) — microphone disabled.")
+            hint = _audio_input_setup_hint(e)
+            if hint:
+                print(f"[mic] {hint}")
             return
 
-        device = _env("ACTUM_AUDIO_DEVICE", "ROBO_AUDIO_DEVICE") or None
+        device = _env("ACTUM_AUDIO_DEVICE") or None
         selected_rate = self._sample_rate
         print(f"[mic] listening (device={device or 'default'}, requested {selected_rate} Hz)…")
 
@@ -327,6 +323,15 @@ class AudioCapture:
 
     def stop(self):
         self._stop.set()
+
+
+def _audio_input_setup_hint(error: Exception) -> str:
+    message = str(error).lower()
+    if isinstance(error, ModuleNotFoundError) or "sounddevice" in message:
+        return "Install Python audio dependencies with `pip install -e .` or `pip install sounddevice soundfile`."
+    if "portaudio" in message:
+        return "Install the native PortAudio library, e.g. `sudo apt install libportaudio2 portaudio19-dev` on Ubuntu/Debian."
+    return ""
 
 
 # ── Audio helpers ──────────────────────────────────────────────────────────────

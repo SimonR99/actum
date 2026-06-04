@@ -15,10 +15,10 @@ def test_resolve_model_path_expands_wildcard(monkeypatch, tmp_path):
     assert _resolve_model_path() == str(model_file)
 
 
-def test_legacy_hardware_config_maps_to_unitree_backend(tmp_path):
+def test_robot_backend_config_selects_unitree(tmp_path):
     config_path = tmp_path / "config.json"
     config_path.write_text(
-        json.dumps({"hardware": {"enabled": True, "type": "unitree_g1", "network_interface": "eth0"}}),
+        json.dumps({"robot": {"backend": "unitree_g1", "unitree_g1": {"network_interface": "eth0"}}}),
         encoding="utf-8",
     )
 
@@ -26,6 +26,14 @@ def test_legacy_hardware_config_maps_to_unitree_backend(tmp_path):
     backend = create_backend(cfg)
 
     assert backend.name == "unitree_g1"
+
+
+def test_default_config_has_speed_profiles(tmp_path):
+    cfg = _load_config(tmp_path / "missing.json")
+
+    assert cfg["active_profile"] == "balanced"
+    assert set(cfg["profiles"]) >= {"fast", "balanced", "power_saver"}
+    assert cfg["profiles"]["power_saver"]["compute"] == "cpu"
 
 
 def test_default_config_uses_laptop_backend(tmp_path):

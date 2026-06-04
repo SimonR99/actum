@@ -19,6 +19,11 @@ Implemented:
 - Live map observations and body perception state.
 - Dashboard stream for intent, behavior tree, map/body state, settings, and tool graph.
 - Runtime settings for model provider/API-key state and selectable tools.
+- Swappable inference providers (the "brain"): on-device LiteRT/Gemma and OpenAI, routed by config.
+- Selectable local compute backend (GPU/CPU/NPU) instead of a hardcoded GPU engine.
+- Speed profiles (fast/balanced/power_saver) bundling provider, compute, loop rates, camera fps, and deliberation cadence.
+- Self-organizing memory: relevance retrieval per turn plus periodic dedupe/trim consolidation.
+- Self-directed deliberation tick so the robot can set its own tasks when idle.
 - Lightweight imports and tests without requiring a robot or model runtime.
 - No vendored Unitree SDK tree.
 

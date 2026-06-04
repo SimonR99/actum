@@ -53,6 +53,8 @@ def default_capabilities() -> CapabilityRegistry:
     registry.register(Capability("record_map_observation", "Add a landmark or spatial observation to the live map.", safety_level="safe"))
     registry.register(Capability("update_body_perception", "Update the robot's self/body perception state.", safety_level="safe"))
     registry.register(Capability("recent_memories", "Read recent episodic memory records.", safety_level="safe"))
+    registry.register(Capability("search_memory", "Retrieve memory entries relevant to a query.", safety_level="safe"))
+    registry.register(Capability("consolidate_memory", "Remove duplicate and stale memory records.", safety_level="safe"))
     registry.register(Capability("schedule_job", "Create a background scheduled instruction.", safety_level="safe"))
     registry.register(Capability("web_fetch", "Fetch readable text from an HTTP(S) URL.", safety_level="data"))
     registry.register(Capability("list_mcp_servers", "List configured MCP tool servers.", safety_level="data"))

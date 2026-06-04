@@ -1,0 +1,1 @@
+- [Actum goals](actum-goals.md) — north-star: maximally autonomous, configurable-speed, multi-hardware robot runtime

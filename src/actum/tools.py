@@ -435,6 +435,40 @@ class RobotTools:
             return "No recent memories."
         return json.dumps(records, indent=2)[:6000]
 
+    def search_memory(self, query: str, limit: int = 6) -> str:
+        """Retrieve the memory entries most relevant to a query.
+
+        Use this to recall facts, people, places, or past events related to what
+        you are doing now, instead of guessing.
+
+        Args:
+            query: What you want to recall, in a few words.
+            limit: Maximum entries to return.
+        """
+        store = self._memory_store
+        if store is None:
+            return "Persistent memory is not available."
+        hits = store.search(query, limit=int(limit))
+        self._record("search_memory", query=query, count=len(hits))
+        if not hits:
+            return f"No memory related to '{query}'."
+        return "\n".join(f"{kind}: {text}" for kind, text in hits)
+
+    def consolidate_memory(self) -> str:
+        """Organise memory by removing duplicate and stale records.
+
+        Run this when memory feels cluttered or after a long session.
+        """
+        store = self._memory_store
+        if store is None:
+            return "Persistent memory is not available."
+        report = store.consolidate()
+        self._record("consolidate_memory", **report)
+        return (
+            f"Memory consolidated: removed {report['removed_episodes']} duplicate episode(s) "
+            f"and {report['removed_spatial_notes']} duplicate spatial note(s)."
+        )
+
     def schedule_job(self, name: str, every_seconds: float, instruction: str) -> str:
         """Create a background scheduled instruction.
 
@@ -625,6 +659,8 @@ class RobotTools:
             self.record_map_observation,
             self.update_body_perception,
             self.recent_memories,
+            self.search_memory,
+            self.consolidate_memory,
             self.schedule_job,
             self.web_fetch,
             self.list_mcp_servers,

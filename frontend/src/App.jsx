@@ -64,6 +64,94 @@ async function api(path, options = {}) {
   return data;
 }
 
+async function startBrowserWavRecorder() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("Browser microphone capture is unavailable");
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true
+    }
+  });
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  const audioContext = new AudioContext();
+  const source = audioContext.createMediaStreamSource(stream);
+  const processor = audioContext.createScriptProcessor(4096, 1, 1);
+  const chunks = [];
+
+  processor.onaudioprocess = (event) => {
+    chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+  };
+  source.connect(processor);
+  processor.connect(audioContext.destination);
+
+  async function close() {
+    processor.disconnect();
+    source.disconnect();
+    stream.getTracks().forEach((track) => track.stop());
+    if (audioContext.state !== "closed") {
+      await audioContext.close();
+    }
+  }
+
+  return {
+    async stop() {
+      const sampleRate = audioContext.sampleRate;
+      await close();
+      return arrayBufferToBase64(encodeWav(chunks, sampleRate));
+    },
+    cancel: close
+  };
+}
+
+function encodeWav(chunks, sampleRate) {
+  const sampleCount = chunks.reduce((total, chunk) => total + chunk.length, 0);
+  const buffer = new ArrayBuffer(44 + sampleCount * 2);
+  const view = new DataView(buffer);
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + sampleCount * 2, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, "data");
+  view.setUint32(40, sampleCount * 2, true);
+
+  let offset = 44;
+  for (const chunk of chunks) {
+    for (let i = 0; i < chunk.length; i += 1) {
+      const sample = Math.max(-1, Math.min(1, chunk[i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+      offset += 2;
+    }
+  }
+  return buffer;
+}
+
+function writeAscii(view, offset, text) {
+  for (let i = 0; i < text.length; i += 1) {
+    view.setUint8(offset + i, text.charCodeAt(i));
+  }
+}
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return window.btoa(binary);
+}
+
 function useActumState() {
   const [state, setState] = useState(null);
   const [frame, setFrame] = useState("");
@@ -144,28 +232,71 @@ export default function App() {
   const { state, frame, wsLive, cameraLive, lastFrameAt, toast, showToast, refresh } = useActumState();
   const [command, setCommand] = useState("");
   const [settingsTab, setSettingsTab] = useState("robot");
+  const [recording, setRecording] = useState(false);
+  const recorderRef = useRef(null);
 
   const robotName = state?.personality?.name || state?.robot_name || "dino";
   const backend = state?.backend || "unknown";
   const connected = Boolean(state?.robot_state?.connected);
   const modelSettings = state?.settings?.models || DEFAULT_MODELS;
   const activeProvider = modelSettings.active_provider || "local";
+  const serverStatus = state?.server?.status || "starting";
+  const serverReady = Boolean(state?.server?.ready);
 
-  async function sendTrigger(source) {
-    const text = command.trim();
-    if (!text && source !== "vision") return;
+  useEffect(() => {
+    return () => {
+      recorderRef.current?.cancel?.();
+    };
+  }, []);
+
+  async function queueTrigger(source, payload = {}) {
     try {
       await api(`/trigger/${source}`, {
         method: "POST",
         body: JSON.stringify({
-          text,
+          text: payload.text || "",
+          audio: payload.audio || "",
           force: source !== "vision",
           importance: source === "vision" ? 0.6 : 1
         })
       });
       showToast(`${source} trigger queued`);
-      if (source !== "vision") setCommand("");
+      if (source !== "vision" && payload.text) setCommand("");
       await refresh();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function sendTrigger(source) {
+    const text = command.trim();
+    if (source === "language" && !text) {
+      await toggleLanguageRecording();
+      return;
+    }
+    if (!text && source !== "vision") return;
+    await queueTrigger(source, { text });
+  }
+
+  async function toggleLanguageRecording() {
+    if (recording) {
+      const recorder = recorderRef.current;
+      recorderRef.current = null;
+      setRecording(false);
+      if (!recorder) return;
+      try {
+        const audio = await recorder.stop();
+        await queueTrigger("language", { audio });
+      } catch (error) {
+        showToast(error.message);
+      }
+      return;
+    }
+
+    try {
+      recorderRef.current = await startBrowserWavRecorder();
+      setRecording(true);
+      showToast("Recording language input");
     } catch (error) {
       showToast(error.message);
     }
@@ -183,6 +314,9 @@ export default function App() {
         backend={backend}
         connected={connected}
         activeProvider={activeProvider}
+        recording={recording}
+        serverStatus={serverStatus}
+        serverReady={serverReady}
       />
 
       <main className="grid h-[calc(100vh-72px)] min-h-[760px] grid-cols-[320px_minmax(520px,1fr)_420px] grid-rows-[minmax(420px,1fr)_300px] gap-4 p-4 max-[1280px]:h-auto max-[1280px]:grid-cols-2 max-[1280px]:grid-rows-none max-[860px]:grid-cols-1">
@@ -240,7 +374,10 @@ function Header({
   cameraLive,
   backend,
   connected,
-  activeProvider
+  activeProvider,
+  recording,
+  serverStatus,
+  serverReady
 }) {
   return (
     <header className="grid min-h-[72px] grid-cols-[300px_minmax(380px,1fr)_auto] items-center gap-4 border-b border-slate-200 bg-white px-4 max-[1180px]:grid-cols-1 max-[1180px]:py-3">
@@ -266,12 +403,13 @@ function Header({
           />
         </div>
         <TriggerButton icon={Send} label="Chat" onClick={() => onTrigger("chat")} primary />
-        <TriggerButton icon={Mic2} label="Language" onClick={() => onTrigger("language")} />
+        <TriggerButton icon={Mic2} label={recording ? "Stop" : "Language"} onClick={() => onTrigger("language")} active={recording} />
         <TriggerButton icon={Camera} label="Vision" onClick={() => onTrigger("vision")} />
       </div>
 
       <div className="flex flex-wrap justify-end gap-2 max-[1180px]:justify-start">
         <StatusChip ok={wsLive} label={wsLive ? "ws live" : "ws offline"} />
+        <StatusChip ok={serverReady} label={`agent ${serverStatus}`} />
         <StatusChip ok={cameraLive} label={cameraLive ? "camera live" : "camera waiting"} />
         <StatusChip ok={connected} label={`backend ${backend}`} />
         <span className="chip">model {activeProvider}</span>
@@ -280,9 +418,9 @@ function Header({
   );
 }
 
-function TriggerButton({ icon: Icon, label, onClick, primary = false }) {
+function TriggerButton({ icon: Icon, label, onClick, primary = false, active = false }) {
   return (
-    <button className={cx("btn", primary && "btn-primary")} onClick={onClick}>
+    <button className={cx("btn", primary && "btn-primary", active && "btn-recording")} onClick={onClick}>
       <Icon className="h-4 w-4" />
       {label}
     </button>

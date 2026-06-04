@@ -53,9 +53,39 @@
     "idle_importance": 0.2,
     "force_idle_reviews": false
   },
+  "active_profile": "balanced",
+  "_active_profile_options": "fast | balanced | power_saver",
+  "_profiles_comment": "A profile is one switch for speed/cost/power: it selects the inference provider, the local compute backend, loop tick rate, idle review cadence, dashboard camera fps, and how often the robot sets its own tasks. The active profile overrides the matching values above and in models.active_provider.",
+  "profiles": {
+    "fast": {
+      "provider": "openai",
+      "compute": "gpu",
+      "tick_seconds": 6,
+      "idle_review_seconds": 20,
+      "camera_fps": 10,
+      "deliberate_seconds": 120
+    },
+    "balanced": {
+      "provider": "local",
+      "compute": "gpu",
+      "tick_seconds": 15,
+      "idle_review_seconds": 45,
+      "camera_fps": 6.7,
+      "deliberate_seconds": 240
+    },
+    "power_saver": {
+      "provider": "local",
+      "compute": "cpu",
+      "tick_seconds": 30,
+      "idle_review_seconds": 120,
+      "camera_fps": 3,
+      "deliberate_seconds": 600
+    }
+  },
   "cron": [],
   "models": {
     "active_provider": "local",
+    "_active_provider_comment": "Overridden by the active profile's provider. Compute backend (gpu/cpu/npu) comes from the profile too.",
     "providers": {
       "local": {
         "enabled": true,
@@ -63,7 +93,7 @@
       },
       "openai": {
         "enabled": false,
-        "model": "",
+        "model": "gpt-4o-mini",
         "api_key_env": "OPENAI_API_KEY"
       },
       "anthropic": {
@@ -80,7 +110,9 @@
   "memory": {
     "enabled": true,
     "path": "data/memory.json",
-    "max_episodes": 1000
+    "max_episodes": 1000,
+    "consolidate_seconds": 300,
+    "_consolidate_seconds_comment": "How often the robot auto-organises memory (dedupe/trim). 0 disables."
   },
   "robot": {
     "backend": "laptop",
@@ -106,15 +138,5 @@
     "enabled": false,
     "_comment": "Enable only trusted MCP servers. Install with: pip install -e .[mcp]",
     "servers": {}
-  },
-  "hardware": {
-    "enabled": false,
-    "_enabled_comment": "Deprecated. Use robot.backend instead.",
-    "type": "unitree_g1",
-    "network_interface": "eth0",
-    "_network_interface_comment": "Run `ip link` to find the interface connected to the robot",
-    "speaker_id": 0,
-    "_speaker_id_options": "0 or 1 (different voice timbres)",
-    "volume": 80
   }
 }

@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from actum.core.schema import now
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+_STOPWORDS = frozenset(
+    "the a an and or of to in on at is are was were be been it this that with for from your you i my".split()
+)
 
 
 @dataclass
@@ -36,6 +42,7 @@ class MemoryStore:
         self.enabled = bool(self.config.get("enabled", True))
         self.path = _memory_path(self.config.get("path", "data/memory.json"))
         self.max_episodes = int(self.config.get("max_episodes", 1000))
+        self.consolidate_seconds = float(self.config.get("consolidate_seconds", 300.0))
         self.facts: dict[str, str] = {}
         self.people: dict[str, dict[str, Any]] = {}
         self.places: dict[str, dict[str, Any]] = {}
@@ -85,7 +92,12 @@ class MemoryStore:
             records = [record for record in records if record.kind == kind]
         return [record.to_dict() for record in records[-limit:]]
 
-    def context(self, limit: int = 6) -> str:
+    def context(self, limit: int = 6, query: str | None = None) -> str:
+        if query and query.strip():
+            relevant = self.search(query, limit=max(limit, 8))
+            if relevant:
+                body = "\n".join(f"  {kind}: {text}" for kind, text in relevant)
+                return f"Relevant memory for this turn:\n{body}"
         lines: list[str] = []
         if self.facts:
             facts = list(self.facts.items())[:12]
@@ -109,6 +121,65 @@ class MemoryStore:
             lines.append("Spatial notes:")
             lines.extend(f"  {record.summary}" for record in self.spatial_notes[-6:])
         return "\n".join(lines)
+
+    def search(self, query: str, limit: int = 8) -> list[tuple[str, str]]:
+        """Return the most relevant memory entries for a query.
+
+        Dependency-free lexical retrieval: token overlap scored against every
+        fact, person, place, spatial note, and recent episode, with a small
+        recency bonus for episodes. This keeps prompts focused on relevant
+        memory instead of dumping the whole store, so it scales as memory grows.
+        """
+        terms = _tokenize(query)
+        if not terms:
+            return []
+        scored: list[tuple[float, float, str, str]] = []
+        for key, value in self.facts.items():
+            scored.append((_score(terms, f"{key} {value}"), 0.0, "fact", f"{key}: {value}"))
+        for name, person in self.people.items():
+            note = person.get("notes", [])[-1]["text"] if person.get("notes") else ""
+            scored.append((_score(terms, f"{name} {note}"), 0.0, "person", f"{name}: {note}"))
+        for name, place in self.places.items():
+            note = place.get("notes", [])[-1]["text"] if place.get("notes") else ""
+            scored.append((_score(terms, f"{name} {note}"), 0.0, "place", f"{name}: {note}"))
+        for record in self.spatial_notes:
+            scored.append((_score(terms, record.summary), record.timestamp, "spatial", record.summary))
+        total = len(self.episodes)
+        for index, record in enumerate(self.episodes):
+            recency = (index + 1) / total if total else 0.0
+            base = _score(terms, record.summary)
+            score = base + 0.15 * recency if base > 0 else 0.0
+            scored.append((score, record.timestamp, record.kind, record.summary))
+        ranked = sorted(
+            (item for item in scored if item[0] > 0),
+            key=lambda item: (item[0], item[1]),
+            reverse=True,
+        )
+        return [(kind, text) for _, _, kind, text in ranked[: max(1, int(limit))]]
+
+    def consolidate(self) -> dict[str, Any]:
+        """Self-maintenance: drop duplicate/stale records and enforce limits.
+
+        Deterministic and safe — collapses exact-duplicate episode and spatial
+        summaries (keeping the most recent), then trims episodes to the cap.
+        """
+        before_episodes = len(self.episodes)
+        before_spatial = len(self.spatial_notes)
+
+        self.episodes = _dedupe_records(self.episodes)
+        self.spatial_notes = _dedupe_records(self.spatial_notes)
+        if len(self.episodes) > self.max_episodes:
+            self.episodes = self.episodes[-self.max_episodes :]
+
+        report = {
+            "removed_episodes": before_episodes - len(self.episodes),
+            "removed_spatial_notes": before_spatial - len(self.spatial_notes),
+            "episodes": len(self.episodes),
+            "spatial_notes": len(self.spatial_notes),
+        }
+        if report["removed_episodes"] or report["removed_spatial_notes"]:
+            self.flush()
+        return report
 
     def snapshot(self) -> dict[str, Any]:
         return {
@@ -213,3 +284,26 @@ def _numeric_id(value: str) -> int | None:
     if value.startswith("mem-") and value[4:].isdigit():
         return int(value[4:])
     return None
+
+
+def _tokenize(text: str) -> set[str]:
+    return {tok for tok in _TOKEN_RE.findall(str(text).lower()) if tok not in _STOPWORDS}
+
+
+def _score(terms: set[str], text: str) -> float:
+    tokens = _tokenize(text)
+    if not tokens:
+        return 0.0
+    overlap = terms & tokens
+    return len(overlap) / len(terms) if overlap else 0.0
+
+
+def _dedupe_records(records: list[MemoryRecord]) -> list[MemoryRecord]:
+    """Keep the most recent record for each distinct summary, preserving order."""
+    last_index: dict[str, int] = {}
+    for index, record in enumerate(records):
+        key = record.summary.strip().lower()
+        if key:
+            last_index[key] = index
+    keep = set(last_index.values())
+    return [record for index, record in enumerate(records) if index in keep or not record.summary.strip()]

@@ -34,6 +34,12 @@ The core runtime is framework-agnostic on purpose. MCP, ROS 2, LangGraph, RAI, o
 
 ## Install
 
+Linux host dependencies:
+
+```bash
+sudo apt install libportaudio2 portaudio19-dev python3-opencv
+```
+
 ```bash
 pip install -e ".[dev,camera]"
 ```
@@ -41,7 +47,7 @@ pip install -e ".[dev,camera]"
 Jetson note: install OpenCV with GStreamer from apt instead of PyPI:
 
 ```bash
-sudo apt install python3-opencv
+sudo apt install libportaudio2 portaudio19-dev python3-opencv
 pip install -e ".[dev]"
 ```
 
@@ -86,18 +92,25 @@ pip install "lerobot[lekiwi]"
     "idle_review": true,
     "idle_review_seconds": 45
   },
+  "active_profile": "balanced",
+  "profiles": {
+    "fast":        {"provider": "openai", "compute": "gpu", "tick_seconds": 6,  "idle_review_seconds": 20,  "camera_fps": 10,  "deliberate_seconds": 120},
+    "balanced":    {"provider": "local",  "compute": "gpu", "tick_seconds": 15, "idle_review_seconds": 45,  "camera_fps": 6.7, "deliberate_seconds": 240},
+    "power_saver": {"provider": "local",  "compute": "cpu", "tick_seconds": 30, "idle_review_seconds": 120, "camera_fps": 3,   "deliberate_seconds": 600}
+  },
   "models": {
     "active_provider": "local",
     "providers": {
       "local": {"enabled": true, "model": "litert-community/gemma-4-E2B-it-litert-lm"},
-      "openai": {"enabled": false, "model": "", "api_key_env": "OPENAI_API_KEY"},
+      "openai": {"enabled": false, "model": "gpt-4o-mini", "api_key_env": "OPENAI_API_KEY"},
       "anthropic": {"enabled": false, "model": "", "api_key_env": "ANTHROPIC_API_KEY"}
     }
   },
   "memory": {
     "enabled": true,
     "path": "data/memory.json",
-    "max_episodes": 1000
+    "max_episodes": 1000,
+    "consolidate_seconds": 300
   },
   "robot": {
     "backend": "laptop",
@@ -136,6 +149,30 @@ backend, laptop I/O flags, Unitree G1 network/audio settings, and LeKiwi
 connection settings. Changes can be applied in memory or saved back to
 `config.json`.
 
+Speed profiles:
+
+`active_profile` is one switch for the speed/cost/power tradeoff. Each profile bundles
+the inference provider, the local compute backend, the autonomy loop tick rate, the idle
+review cadence, the dashboard camera frame rate, and how often the robot sets its own
+tasks. The active profile is authoritative for those knobs and overrides
+`models.active_provider`.
+
+- `fast`: cloud inference (OpenAI), GPU, snappy loops and camera — lowest latency, needs an API key.
+- `balanced`: local on-device model on GPU at moderate cadence (default).
+- `power_saver`: local model on CPU with slow loops and low camera fps — for thermally or battery constrained hardware.
+
+Define your own profiles by adding entries under `profiles`. Switch at runtime from the
+dashboard or with `POST /settings/profile {"profile": "fast"}`. Provider/compute changes
+take effect on the next model load; loop-rate changes apply immediately.
+
+Inference providers (the swappable "brain"):
+
+- `local`: on-device LiteRT/Gemma multimodal model. `compute` selects the LiteRT backend (`gpu`, `cpu`, or `npu`).
+- `openai`: OpenAI chat models (multimodal + tool calling), e.g. `gpt-4o-mini`. Install with `pip install -e ".[openai]"`.
+
+API keys are read from the environment. A `.env` file in the project root is loaded
+automatically (it is gitignored), so `OPENAI_API_KEY=...` in `.env` is enough.
+
 Companion modes:
 
 - `off`: direct voice/text only; passive camera/timer events are ignored.
@@ -152,6 +189,14 @@ Memory:
 
 The default store is JSON-backed at `data/memory.json` so it works on a laptop without a database. The interface is intentionally ready for SQLite, vector search, and richer spatial maps later.
 
+The robot organises its own memory:
+
+- Relevant-memory retrieval: each turn pulls only the entries related to the request (lexical
+  relevance ranking) instead of dumping the whole store, so prompts stay focused as memory grows.
+  The agent can also recall on demand with `search_memory(query)`.
+- Self-consolidation: every `memory.consolidate_seconds` the background loop dedupes and trims
+  memory automatically (set to `0` to disable). The agent can also trigger it with `consolidate_memory()`.
+
 ## Run
 
 ```bash
@@ -163,6 +208,16 @@ actum
 
 # Use a local LiteRT model
 MODEL_PATH=/path/to/model.litertlm actum-server
+```
+
+`actum` is the headless terminal entrypoint and does not open the web UI. If
+`http://localhost:8000` returns connection refused, check that `actum-server`
+is the process you started and that the active Python environment has the
+project installed:
+
+```bash
+which actum-server
+pip install -e ".[dev,camera]"
 ```
 
 Docker:
@@ -196,7 +251,7 @@ Hardware environment variables:
 - `ACTUM_AUDIO_DEVICE`: sounddevice/ALSA device such as `hw:1,0`.
 - `ACTUM_VAD_DEBUG`: set to any value to print voice activity detector diagnostics.
 
-Legacy `SENSORIMOTOR_*` and `ROBO_*` names are still accepted as fallbacks for older local configs.
+If server-side microphone capture logs `PortAudio library not found`, install `libportaudio2`/`portaudio19-dev` on the host. The dashboard Language button can also record through the browser microphone on `localhost`; press it once to start recording and again to send the audio.
 
 ## Agent Tools
 
@@ -222,6 +277,8 @@ The LLM can call:
 | `record_map_observation(summary, place, x, y, yaw_deg, confidence)` | Add a live map observation |
 | `update_body_perception(summary, posture, holding, contacts, joints_json)` | Update body/self perception |
 | `recent_memories(limit, kind)` | Read recent memory records |
+| `search_memory(query, limit)` | Retrieve memory entries relevant to a query |
+| `consolidate_memory()` | Remove duplicate/stale memory records |
 | `schedule_job(name, every_seconds, instruction)` | Create a recurring background instruction |
 | `web_fetch(url, max_chars)` | Fetch readable text from an HTTP(S) URL |
 | `list_mcp_servers()` | Show configured MCP servers |
@@ -257,7 +314,8 @@ src/actum/
   server.py             # FastAPI/WebSocket dashboard
   perception.py         # camera and microphone helpers
   tts.py                # local TTS backends
-  core/                 # events, intent, memory, companion policy, schemas
+  core/                 # events, intent, memory, companion policy, profiles, schemas
+  inference/            # swappable LLM brain: LiteRT (local) + OpenAI providers
   backends/             # laptop, fake, Unitree G1, LeKiwi
   integrations/         # optional MCP and web adapters
 frontend/

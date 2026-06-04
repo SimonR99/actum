@@ -11,22 +11,10 @@ from actum.backends.lekiwi import LeKiwiBackend
 from actum.backends.unitree_g1 import UnitreeG1Backend
 
 
-def _legacy_backend_config(config: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    hardware = config.get("hardware", {})
-    if isinstance(hardware, dict) and hardware.get("enabled"):
-        backend = str(hardware.get("type") or "unitree_g1").lower()
-        if backend == "unitree_g1":
-            return "unitree_g1", dict(hardware)
-    return "laptop", {}
-
-
 def create_backend(config: dict[str, Any]) -> RobotBackend:
     robot_cfg = config.get("robot", {}) if isinstance(config.get("robot"), dict) else {}
-    backend_name = str(robot_cfg.get("backend") or "").lower().strip()
-    if backend_name:
-        backend_cfg = robot_cfg.get(backend_name, {}) if isinstance(robot_cfg.get(backend_name), dict) else {}
-    else:
-        backend_name, backend_cfg = _legacy_backend_config(config)
+    backend_name = str(robot_cfg.get("backend") or "laptop").lower().strip()
+    backend_cfg = robot_cfg.get(backend_name, {}) if isinstance(robot_cfg.get(backend_name), dict) else {}
 
     if backend_name in {"laptop", "local", "companion"}:
         return LaptopBackend(backend_cfg)

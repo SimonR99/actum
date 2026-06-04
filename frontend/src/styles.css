@@ -52,6 +52,10 @@
     @apply border-blue-600 bg-blue-600 text-white hover:bg-blue-700;
   }
 
+  .btn-recording {
+    @apply border-rose-600 bg-rose-600 text-white hover:bg-rose-700;
+  }
+
   .btn-quiet {
     @apply border-transparent bg-slate-100 text-slate-700 hover:bg-slate-200;
   }

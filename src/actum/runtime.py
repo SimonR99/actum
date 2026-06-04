@@ -13,7 +13,8 @@ from actum.core.companion import CompanionDecision, CompanionPolicy
 from actum.core.events import EventLog
 from actum.core.intent import IntentState
 from actum.core.memory import MemoryStore
-from actum.core.schema import ActionResult
+from actum.core.profile import ProfileManager
+from actum.core.schema import ActionResult, now
 from actum.core.settings import RuntimeSettings
 from actum.integrations.mcp import describe_servers
 
@@ -27,11 +28,21 @@ class RobotRuntime:
         self.intent = IntentState()
         self.capabilities = default_capabilities()
         capability_names = [item["name"] for item in self.capabilities.list()]
+
+        # The active speed profile is authoritative for provider/compute/loop
+        # rates; apply it over the raw config before building dependent state.
+        self.profiles = ProfileManager(config)
+        profile = self.profiles.resolved
+        config.setdefault("models", {})["active_provider"] = profile["provider"]
+
         self.settings = RuntimeSettings(config, capability_names)
         self.personality = config.get("personality", {}) if isinstance(config.get("personality"), dict) else {}
         self.companion = CompanionPolicy(config.get("companion", {}) if isinstance(config.get("companion"), dict) else {})
         self.memory = MemoryStore(config.get("memory", {}) if isinstance(config.get("memory"), dict) else {})
-        behavior_cfg = config.get("behavior_loop", {}) if isinstance(config.get("behavior_loop"), dict) else {}
+        self._last_consolidate_at = now()
+        behavior_cfg = dict(config.get("behavior_loop", {}) if isinstance(config.get("behavior_loop"), dict) else {})
+        behavior_cfg["tick_seconds"] = profile["tick_seconds"]
+        behavior_cfg["idle_review_seconds"] = profile["idle_review_seconds"]
         self.behavior = BehaviorTreeState(behavior_cfg)
         cron_cfg = config.get("cron", []) if isinstance(config.get("cron"), list) else []
         self.cron = CronRegistry(cron_cfg)
@@ -115,6 +126,51 @@ class RobotRuntime:
         self.events.append("behavior.node", "agent", node=node_id, status=status, detail=detail, ok=ok)
         return ok
 
+    @property
+    def compute_backend(self) -> str:
+        return str(self.profiles.resolved.get("compute", "gpu"))
+
+    @property
+    def deliberate_seconds(self) -> float:
+        return float(self.profiles.resolved.get("deliberate_seconds", 0.0))
+
+    @property
+    def camera_fps(self) -> float:
+        return float(self.profiles.resolved.get("camera_fps", 6.7))
+
+    def set_profile(self, name: str) -> tuple[bool, str]:
+        """Switch the active speed profile and apply its loop-rate knobs.
+
+        Note: the inference provider/compute backend only change after the next
+        model load, since the engine is constructed at startup.
+        """
+        try:
+            profile = self.profiles.set_active(name)
+        except ValueError as exc:
+            return False, str(exc)
+        self.behavior.tick_seconds = float(profile["tick_seconds"])
+        self.behavior.idle_review_seconds = float(profile["idle_review_seconds"])
+        self.config["active_profile"] = self.profiles.active_name
+        self.events.append("profile.active", "operator", profile=self.profiles.active_name, resolved=profile)
+        provider = str(profile["provider"]).lower()
+        note = f"Profile set to {self.profiles.active_name}."
+        if provider != str(self.settings.models.get("active_provider", "")).lower():
+            note += f" Restart the runtime to switch the inference provider to '{provider}'."
+        return True, note
+
+    def maybe_consolidate_memory(self) -> dict[str, Any] | None:
+        """Run periodic memory self-maintenance if the interval has elapsed."""
+        interval = self.memory.consolidate_seconds
+        if interval <= 0:
+            return None
+        if (now() - self._last_consolidate_at) < interval:
+            return None
+        self._last_consolidate_at = now()
+        report = self.memory.consolidate()
+        if report.get("removed_episodes") or report.get("removed_spatial_notes"):
+            self.events.append("memory.consolidated", "runtime", report=report)
+        return report
+
     def add_cron_job(self, name: str, every_seconds: float, instruction: str) -> dict[str, Any]:
         job = self.cron.add(name, every_seconds, instruction)
         self.events.append("cron.add", "operator", job=job.to_dict())
@@ -189,6 +245,7 @@ class RobotRuntime:
             "cron": self.cron.to_dict(),
             "map": self.spatial_map.to_dict(),
             "body": self.body.to_dict(),
+            "profile": self.profiles.to_dict(),
             "settings": self.settings.to_dict(),
             "events": self.events.tail(200),
             "tool_graph": self.tool_graph[-200:],
