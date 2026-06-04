@@ -1,6 +1,9 @@
+import pytest
+
 from actum.core.profile import ProfileManager
 from actum.inference import build_provider
 from actum.inference.base import build_tool_schema
+from actum.inference.stt import OpenAISTT, WhisperSTT, build_stt
 from actum.runtime import RobotRuntime
 
 
@@ -57,6 +60,26 @@ def test_build_provider_selects_litert_and_openai():
         resolve_model_path=lambda: "model.litertlm",
     )
     assert cloud.name == "openai"
+
+
+def test_default_stt_engine_is_local_whisper():
+    runtime = RobotRuntime({"robot": {"backend": "fake"}}, "bot")
+    speech = runtime.snapshot()["settings"]["speech"]
+
+    assert speech["stt_engine"] == "whisper"
+    assert "whisper" in speech["available_stt"]
+    assert isinstance(build_stt(runtime.settings), WhisperSTT)
+
+
+def test_stt_engine_selection_and_validation():
+    runtime = RobotRuntime({"robot": {"backend": "fake"}, "speech": {"stt_engine": "openai"}}, "bot")
+    assert isinstance(build_stt(runtime.settings), OpenAISTT)
+
+    runtime.settings.set_stt_engine("model")
+    assert build_stt(runtime.settings) is None
+
+    with pytest.raises(ValueError):
+        runtime.settings.set_stt_engine("nope")
 
 
 def test_tool_schema_skips_self_and_marks_required():

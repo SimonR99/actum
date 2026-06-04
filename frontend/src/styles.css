@@ -72,3 +72,87 @@
     @apply border-amber-200 bg-amber-50 text-amber-700;
   }
 }
+
+/* Markdown rendering inside assistant chat bubbles */
+.md > :first-child {
+  margin-top: 0;
+}
+.md > :last-child {
+  margin-bottom: 0;
+}
+.md p {
+  margin: 0.4rem 0;
+  line-height: 1.5;
+}
+.md h1,
+.md h2,
+.md h3 {
+  margin: 0.6rem 0 0.3rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.md h1 {
+  font-size: 1.05rem;
+}
+.md h2 {
+  font-size: 1rem;
+}
+.md h3 {
+  font-size: 0.95rem;
+}
+.md ul,
+.md ol {
+  margin: 0.4rem 0;
+  padding-left: 1.25rem;
+}
+.md ul {
+  list-style: disc;
+}
+.md ol {
+  list-style: decimal;
+}
+.md li {
+  margin: 0.15rem 0;
+}
+.md a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+.md code {
+  background: #f1f5f9;
+  border-radius: 4px;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.85em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.md pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 0.7rem 0.85rem;
+  margin: 0.5rem 0;
+  overflow-x: auto;
+  font-size: 0.82em;
+}
+.md pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+.md blockquote {
+  border-left: 3px solid #cbd5e1;
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  color: #475569;
+}
+.md table {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  font-size: 0.85em;
+}
+.md th,
+.md td {
+  border: 1px solid #e2e8f0;
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+}

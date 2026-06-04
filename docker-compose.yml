@@ -22,6 +22,11 @@ services:
               count: 1
               capabilities: [gpu]
     
+    # API keys (OPENAI_API_KEY, …) loaded from the project .env if present.
+    env_file:
+      - path: .env
+        required: false
+
     # Environment variables
     environment:
       - PORT=8000

@@ -32,6 +32,7 @@ import numpy as np
 
 from actum import tts as tts_module
 from actum.inference import InferenceProvider, build_provider
+from actum.inference.stt import build_stt
 from actum.runtime import RobotRuntime
 from actum.tools import RobotTools
 from actum.perception import AudioCapture, open_camera, capture_jpeg
@@ -90,6 +91,7 @@ class RobotAgent:
         _load_dotenv(self._config_path.parent)
         self.config = _load_config(self._config_path)
         self.provider: InferenceProvider | None = None
+        self.stt = None
         self.tts_backend: tts_module.TTSBackend | None = None
         self.tools: RobotTools | None = None
         self.runtime = RobotRuntime(self.config, self.get_name())
@@ -131,6 +133,8 @@ class RobotAgent:
         )
         print(f"Starting inference provider: {self.provider.name}…")
         self.provider.start(system_prompt, self.tools.get_tools())
+
+        self.stt = build_stt(self.runtime.settings)
 
         self._camera = open_camera()
         self._init_backend()
@@ -248,7 +252,13 @@ class RobotAgent:
         content: list[dict] = []
 
         if event.get("audio"):
-            content.append({"type": "audio", "blob": event["audio"]})
+            # Transcribe through the selected STT engine; if it yields nothing
+            # (engine is "model", disabled, or failed), pass raw audio to the model.
+            transcript = self.stt.transcribe(event["audio"]) if self.stt is not None else ""
+            if transcript:
+                content.append({"type": "text", "text": f"(voice) {transcript}"})
+            else:
+                content.append({"type": "audio", "blob": event["audio"]})
         if event.get("image"):
             content.append({"type": "image", "blob": event["image"]})
 
@@ -547,6 +557,21 @@ class RobotAgent:
             except Exception as exc:
                 return False, f"Profile changed in memory but failed to save config: {exc}"
         return True, message
+
+    def set_stt_engine(self, engine: str, persist: bool = True) -> tuple[bool, str]:
+        try:
+            self.runtime.settings.set_stt_engine(engine)
+        except Exception as exc:
+            return False, str(exc)
+        # STT can be swapped live (unlike the LLM provider); rebuild now.
+        self.stt = build_stt(self.runtime.settings)
+        self.config["speech"] = dict(self.runtime.settings.speech)
+        if persist:
+            try:
+                _persist_config_updates(self._config_path, {"speech": self.config["speech"]})
+            except Exception as exc:
+                return False, f"Speech setting changed in memory but failed to save config: {exc}"
+        return True, f"Speech-to-text engine set to {engine}."
 
     def set_tool_enabled(self, tool: str, enabled: bool, persist: bool = False) -> tuple[bool, str]:
         try:
@@ -860,6 +885,11 @@ def _default_config() -> dict:
         "tools": {
             "enabled": [],
             "_enabled_comment": "Empty means all registered tools are available.",
+        },
+        "speech": {
+            "stt_engine": "whisper",
+            "whisper_model": "base",
+            "whisper_compute": "auto",
         },
         "memory": {
             "enabled": True,

@@ -1,0 +1,284 @@
+import { createContext, createElement, useContext, useEffect, useState } from "react";
+
+export const LANGUAGES = [
+  { id: "fr", label: "FR" },
+  { id: "en", label: "EN" }
+];
+
+const DEFAULT_LANG = "fr";
+const STORAGE_KEY = "actum_lang";
+
+const STRINGS = {
+  fr: {
+    "app.subtitle": "Console d'autonomie permanente",
+    // header status
+    "status.ws.live": "ws actif",
+    "status.ws.offline": "ws hors ligne",
+    "status.agent": "agent",
+    "status.camera.live": "caméra active",
+    "status.camera.waiting": "caméra en attente",
+    "status.backend": "robot",
+    "status.model": "modèle",
+    // panels
+    "panel.intent": "Intention",
+    "panel.perception": "Perception",
+    "panel.settings": "Réglages",
+    "panel.toolgraph": "Graphe d'outils",
+    "panel.maptimeline": "Carte et chronologie",
+    "panel.console": "Console",
+    "panel.chat": "Discussion",
+    // intent
+    "intent.goal": "Objectif",
+    "intent.noTask": "Aucune tâche active",
+    "intent.plan": "Plan",
+    "intent.steps": "étapes",
+    "intent.behaviorTree": "Arbre de comportement",
+    "intent.ticks": "ticks",
+    "intent.waitingPlan": "En attente d'un plan",
+    "intent.noNodes": "Aucun nœud de comportement",
+    "meta.idle": "inactif",
+    // perception
+    "perception.waiting": "en attente",
+    "perception.noFrame": "Aucune image caméra",
+    "perception.body": "Corps",
+    "perception.unknown": "inconnu",
+    "perception.bodyUnavailable": "État du corps indisponible",
+    "perception.holding": "Tient",
+    "perception.nothing": "rien",
+    "perception.contacts": "Contacts",
+    "perception.none": "aucun",
+    "perception.pose": "Pose",
+    "perception.joints": "Articulations",
+    "perception.values": "valeurs",
+    "perception.recent": "Perception récente",
+    "perception.items": "éléments",
+    "perception.noObs": "Aucune observation",
+    // tool graph
+    "toolgraph.calls": "appels",
+    "toolgraph.none": "Aucun appel d'outil",
+    "toolgraph.queued": "en file",
+    "toolgraph.noArgs": "aucun argument",
+    // map / timeline
+    "map.facts": "Faits",
+    "map.places": "Lieux",
+    "map.map": "Carte",
+    "map.events": "Événements",
+    "map.observations": "observations",
+    "map.noObs": "Aucune observation de carte",
+    "timeline.title": "Chronologie",
+    "timeline.latest": "récent",
+    "timeline.none": "Aucun événement",
+    // chat
+    "chat.placeholder": "Écrire un message au robot…",
+    "chat.send": "Envoyer",
+    "chat.voice": "Voix",
+    "chat.stop": "Arrêter",
+    "chat.vision": "Regarder",
+    "chat.empty": "Démarrez la conversation, à l'écrit ou à la voix.",
+    "chat.you": "Vous",
+    "chat.voiceMessage": "🎙️ Message vocal envoyé",
+    "chat.thinking": "Le robot réfléchit…",
+    "chat.recording": "Enregistrement en cours",
+    // settings tabs
+    "settings.tab.robot": "Robot",
+    "settings.tab.model": "Modèle",
+    "settings.tab.tools": "Outils",
+    "settings.tab.cron": "Tâches",
+    "settings.operator": "opérateur",
+    // robot settings
+    "robot.name": "Nom",
+    "robot.backend": "Plateforme",
+    "robot.webcam": "Webcam",
+    "robot.microphone": "Microphone",
+    "robot.speaker": "Haut-parleur",
+    "robot.networkInterface": "Interface réseau",
+    "robot.speakerId": "ID haut-parleur",
+    "robot.volume": "Volume",
+    "robot.remoteIp": "IP distante",
+    "robot.port": "Port",
+    "robot.id": "ID",
+    "robot.saveConfig": "Enregistrer dans config.json",
+    "robot.apply": "Appliquer le robot",
+    // model settings
+    "model.provider": "Fournisseur",
+    "model.model": "Modèle",
+    "model.apiKey": "Clé API",
+    "model.apiKeyConfigured": "Clé API configurée",
+    "model.apiKeyKeep": "Laisser vide pour conserver",
+    "model.providerEnabled": "Fournisseur activé",
+    "model.save": "Enregistrer les réglages",
+    "model.saveKey": "Enregistrer la clé dans config.json",
+    "model.apply": "Appliquer le modèle",
+    // profile
+    "profile.label": "Profil de vitesse",
+    "profile.fast": "Rapide",
+    "profile.balanced": "Équilibré",
+    "profile.power_saver": "Économie",
+    // speech / stt
+    "speech.stt": "Reconnaissance vocale",
+    "stt.whisper": "Whisper (local)",
+    "stt.openai": "OpenAI (cloud)",
+    "stt.model": "Modèle multimodal",
+    // tools settings
+    "tools.save": "Enregistrer la sélection d'outils",
+    // cron settings
+    "cron.name": "Nom",
+    "cron.everySeconds": "Toutes les (secondes)",
+    "cron.instruction": "Instruction",
+    "cron.add": "Ajouter une tâche",
+    "cron.namePh": "Vérification de la pièce",
+    "cron.instructionPh": "Inspecter la pièce et mettre à jour la carte",
+    "cron.none": "Aucune tâche planifiée",
+    // toasts
+    "toast.triggerQueued": "déclencheur en file",
+    "toast.robotUpdated": "Réglages du robot mis à jour",
+    "toast.modelUpdated": "Réglages du modèle mis à jour",
+    "toast.toolUpdated": "Outil mis à jour",
+    "toast.profileUpdated": "Profil mis à jour",
+    "toast.speechUpdated": "Reconnaissance vocale mise à jour",
+    "toast.scheduled": "Planifié",
+    "toast.passiveIgnored": "Événement passif ignoré"
+  },
+  en: {
+    "app.subtitle": "Always-on autonomy console",
+    "status.ws.live": "ws live",
+    "status.ws.offline": "ws offline",
+    "status.agent": "agent",
+    "status.camera.live": "camera live",
+    "status.camera.waiting": "camera waiting",
+    "status.backend": "backend",
+    "status.model": "model",
+    "panel.intent": "Intent",
+    "panel.perception": "Perception",
+    "panel.settings": "Settings",
+    "panel.toolgraph": "Tool Graph",
+    "panel.maptimeline": "Map And Timeline",
+    "panel.console": "Console",
+    "panel.chat": "Chat",
+    "intent.goal": "Goal",
+    "intent.noTask": "No active task",
+    "intent.plan": "Plan",
+    "intent.steps": "steps",
+    "intent.behaviorTree": "Behavior Tree",
+    "intent.ticks": "ticks",
+    "intent.waitingPlan": "Waiting for a plan",
+    "intent.noNodes": "No behavior nodes",
+    "meta.idle": "idle",
+    "perception.waiting": "waiting",
+    "perception.noFrame": "No camera frame",
+    "perception.body": "Body",
+    "perception.unknown": "unknown",
+    "perception.bodyUnavailable": "Body state unavailable",
+    "perception.holding": "Holding",
+    "perception.nothing": "nothing",
+    "perception.contacts": "Contacts",
+    "perception.none": "none",
+    "perception.pose": "Pose",
+    "perception.joints": "Joints",
+    "perception.values": "values",
+    "perception.recent": "Recent Perception",
+    "perception.items": "items",
+    "perception.noObs": "No observations yet",
+    "toolgraph.calls": "calls",
+    "toolgraph.none": "No tool calls yet",
+    "toolgraph.queued": "queued",
+    "toolgraph.noArgs": "no arguments",
+    "map.facts": "Facts",
+    "map.places": "Places",
+    "map.map": "Map",
+    "map.events": "Events",
+    "map.observations": "observations",
+    "map.noObs": "No map observations",
+    "timeline.title": "Timeline",
+    "timeline.latest": "latest",
+    "timeline.none": "No events yet",
+    "chat.placeholder": "Message the robot…",
+    "chat.send": "Send",
+    "chat.voice": "Voice",
+    "chat.stop": "Stop",
+    "chat.vision": "Look",
+    "chat.empty": "Start the conversation by text or voice.",
+    "chat.you": "You",
+    "chat.voiceMessage": "🎙️ Voice message sent",
+    "chat.thinking": "The robot is thinking…",
+    "chat.recording": "Recording",
+    "settings.tab.robot": "Robot",
+    "settings.tab.model": "Model",
+    "settings.tab.tools": "Tools",
+    "settings.tab.cron": "Cron",
+    "settings.operator": "operator",
+    "robot.name": "Name",
+    "robot.backend": "Backend",
+    "robot.webcam": "Webcam",
+    "robot.microphone": "Microphone",
+    "robot.speaker": "Speaker",
+    "robot.networkInterface": "Network interface",
+    "robot.speakerId": "Speaker ID",
+    "robot.volume": "Volume",
+    "robot.remoteIp": "Remote IP",
+    "robot.port": "Port",
+    "robot.id": "ID",
+    "robot.saveConfig": "Save to config.json",
+    "robot.apply": "Apply Robot",
+    "model.provider": "Provider",
+    "model.model": "Model",
+    "model.apiKey": "API key",
+    "model.apiKeyConfigured": "API key configured",
+    "model.apiKeyKeep": "Leave blank to keep existing",
+    "model.providerEnabled": "Provider enabled",
+    "model.save": "Save settings",
+    "model.saveKey": "Save key to config.json",
+    "model.apply": "Apply Model",
+    "profile.label": "Speed profile",
+    "profile.fast": "Fast",
+    "profile.balanced": "Balanced",
+    "profile.power_saver": "Power saver",
+    "speech.stt": "Speech recognition",
+    "stt.whisper": "Whisper (local)",
+    "stt.openai": "OpenAI (cloud)",
+    "stt.model": "Multimodal model",
+    "tools.save": "Save tool selection",
+    "cron.name": "Name",
+    "cron.everySeconds": "Every seconds",
+    "cron.instruction": "Instruction",
+    "cron.add": "Add Job",
+    "cron.namePh": "Room check",
+    "cron.instructionPh": "Review the room and update the map",
+    "cron.none": "No scheduled jobs",
+    "toast.triggerQueued": "trigger queued",
+    "toast.robotUpdated": "Robot settings updated",
+    "toast.modelUpdated": "Model settings updated",
+    "toast.toolUpdated": "Tool updated",
+    "toast.profileUpdated": "Profile updated",
+    "toast.speechUpdated": "Speech recognition updated",
+    "toast.scheduled": "Scheduled",
+    "toast.passiveIgnored": "Passive event ignored"
+  }
+};
+
+const LanguageContext = createContext(null);
+
+export function LanguageProvider({ children }) {
+  const [lang, setLang] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_LANG;
+    return window.localStorage.getItem(STORAGE_KEY) || DEFAULT_LANG;
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEY, lang);
+    document.documentElement.lang = lang;
+  }, [lang]);
+
+  const table = STRINGS[lang] || STRINGS[DEFAULT_LANG];
+  const t = (key) => table[key] ?? STRINGS[DEFAULT_LANG][key] ?? key;
+  return createElement(LanguageContext.Provider, { value: { lang, setLang, t } }, children);
+}
+
+export function useT() {
+  const ctx = useContext(LanguageContext);
+  if (!ctx) {
+    const table = STRINGS[DEFAULT_LANG];
+    return { lang: DEFAULT_LANG, setLang: () => {}, t: (key) => table[key] ?? key };
+  }
+  return ctx;
+}

@@ -107,6 +107,13 @@
     "enabled": [],
     "_enabled_comment": "Empty means all registered tools are available."
   },
+  "speech": {
+    "stt_engine": "whisper",
+    "_stt_engine_options": "whisper (local) | openai (cloud) | model (multimodal passthrough)",
+    "whisper_model": "base",
+    "_whisper_model_options": "tiny | base | small | medium | large-v3",
+    "whisper_compute": "auto"
+  },
   "memory": {
     "enabled": true,
     "path": "data/memory.json",

@@ -9,19 +9,22 @@ the same loop.
 
 from __future__ import annotations
 
+import base64
+import io
 import json
 from typing import Any, Callable
 
 from actum.inference.base import InferenceProvider, build_tool_schema
 
 DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe"
 _MAX_TOOL_ROUNDS = 12
 _MAX_HISTORY = 40  # messages kept after the system prompt
 
 
 class OpenAIProvider(InferenceProvider):
     name = "openai"
-    supports_audio = False
+    supports_audio = True
     supports_vision = True
 
     def __init__(
@@ -29,8 +32,10 @@ class OpenAIProvider(InferenceProvider):
         model: str,
         pop_pending_frame: Callable[[], str | None],
         api_key: str = "",
+        transcribe_model: str = DEFAULT_TRANSCRIBE_MODEL,
     ):
         self._model = model or DEFAULT_MODEL
+        self._transcribe_model = transcribe_model or DEFAULT_TRANSCRIBE_MODEL
         self._pop_pending_frame = pop_pending_frame
         self._api_key = api_key
         self._client: Any = None
@@ -115,11 +120,31 @@ class OpenAIProvider(InferenceProvider):
                 blocks.append({"type": "text", "text": item.get("text", "")})
             elif kind == "image" and item.get("blob"):
                 blocks.append(_image_block(item["blob"]))
-            elif kind == "audio":
+            elif kind == "audio" and item.get("blob"):
+                transcript = self._transcribe(item["blob"])
                 blocks.append(
-                    {"type": "text", "text": "[audio omitted: OpenAI provider has no audio input]"}
+                    {
+                        "type": "text",
+                        "text": f"(voice transcript) {transcript}"
+                        if transcript
+                        else "[voice message could not be transcribed]",
+                    }
                 )
         return blocks or [{"type": "text", "text": ""}]
+
+    def _transcribe(self, blob: str) -> str:
+        """Transcribe a base64 WAV blob to text via the OpenAI audio API."""
+        try:
+            buffer = io.BytesIO(base64.b64decode(blob))
+            buffer.name = "audio.wav"
+            result = self._client.audio.transcriptions.create(
+                model=self._transcribe_model,
+                file=buffer,
+            )
+            return (getattr(result, "text", "") or "").strip()
+        except Exception as exc:  # transcription is best-effort
+            print(f"[openai] transcription failed: {exc}")
+            return ""
 
     def _trim_history(self) -> None:
         if len(self._messages) <= _MAX_HISTORY + 1:

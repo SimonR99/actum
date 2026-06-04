@@ -252,6 +252,14 @@ def attach_server(agent: RobotAgent, app: FastAPI):
             status_code=200 if ok else 400,
         )
 
+    @app.post("/settings/speech")
+    async def settings_speech(body: dict):
+        ok, message = agent.set_stt_engine(body.get("stt_engine", ""), persist=bool(body.get("persist", True)))
+        return JSONResponse(
+            {"ok": ok, "message": message, "settings": agent.runtime.settings.to_dict()},
+            status_code=200 if ok else 400,
+        )
+
     @app.post("/settings/tool")
     async def settings_tool(body: dict):
         ok, message = agent.set_tool_enabled(

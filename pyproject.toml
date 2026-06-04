@@ -37,6 +37,9 @@ camera = ["opencv-python-headless>=4.8.0"]
 dev = ["pytest>=8.0"]
 # Cloud inference provider (used by the "fast" speed profile).
 openai = ["openai>=1.40.0"]
+# Local speech-to-text (default STT engine). On Jetson, install a CUDA build of
+# ctranslate2 from NVIDIA for GPU acceleration.
+whisper = ["faster-whisper>=1.0.0"]
 # Hardware/policy stacks are optional so local tests and dashboard work without robots.
 mcp = ["mcp>=1.0.0"]
 unitree = ["unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git"]

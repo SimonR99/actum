@@ -65,16 +65,23 @@ WORKDIR /build
 COPY pyproject.toml README.md ./
 COPY src ./src
 
-# Install project dependencies
-# Note: kokoro-onnx is Linux-specific; camera is optional
-RUN pip install -e ".[camera]"
+# Install project dependencies.
+# Bundle every stack so the container is self-contained with no host conflicts:
+#   camera  → OpenCV capture
+#   openai  → cloud inference provider (fast profile)
+#   whisper → local speech-to-text (default STT engine)
+#   mcp     → trusted external tool servers
+RUN pip install -e ".[camera,openai,whisper,mcp]"
 
-# Pre-download models to avoid runtime delays (optional but recommended)
-# Comment out if you want smaller image; models will download on first run
+# Pre-download models to avoid runtime delays (optional but recommended).
+# Comment out if you want a smaller image; models will download on first run.
 RUN python3 -c "from huggingface_hub import snapshot_download; \
     snapshot_download('litert-community/gemma-4-E2B-it-litert-lm', \
     allow_patterns='gemma-4-E2B-it.litertlm', \
     cache_dir='/root/.cache/huggingface')" || true
+
+# Pre-download the default local Whisper model so first voice input is instant.
+RUN python3 -c "from faster_whisper import WhisperModel; WhisperModel('base')" || true
 
 # ── Runtime Stage: Minimal production image ──────────────────────────────
 FROM base as runtime

@@ -14,6 +14,7 @@ def test_lightweight_submodules_import_without_model_runtime():
         "actum.core.settings",
         "actum.inference",
         "actum.inference.base",
+        "actum.inference.stt",
         "actum.integrations.mcp",
         "actum.integrations.web",
         "actum.perception",

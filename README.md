@@ -173,6 +173,14 @@ Inference providers (the swappable "brain"):
 API keys are read from the environment. A `.env` file in the project root is loaded
 automatically (it is gitignored), so `OPENAI_API_KEY=...` in `.env` is enough.
 
+Speech-to-text (selectable in the dashboard, `speech.stt_engine`):
+
+- `whisper`: local [faster-whisper](https://github.com/SYSTRAN/faster-whisper), fully on-device (default). Install with `pip install -e ".[whisper]"`; the model downloads on first use.
+- `openai`: OpenAI cloud transcription — no local model, needs an API key.
+- `model`: no separate STT; raw audio is passed to the multimodal model (local Gemma only).
+
+The robot's voice (text-to-speech) remains local Kokoro regardless of the STT choice.
+
 Companion modes:
 
 - `off`: direct voice/text only; passive camera/timer events are ignored.
@@ -289,6 +297,11 @@ The LLM can call:
 
 ## Dashboard
 
+The dashboard includes a combined **chat + voice console** (right rail, alongside Settings):
+type a message or hold the mic to talk, and the robot's replies render as Markdown in a
+transcript. The UI is bilingual — **French by default**, switchable to English with the FR/EN
+toggle in the header (the choice is remembered per browser).
+
 The dashboard streams:
 
 - camera frames
@@ -306,7 +319,7 @@ It intentionally shows structured reasoning artifacts and summaries, not private
 
 ## Project Layout
 
-```
+```text
 src/actum/
   agent.py              # LLM loop and CLI
   runtime.py            # shared runtime state
@@ -315,7 +328,7 @@ src/actum/
   perception.py         # camera and microphone helpers
   tts.py                # local TTS backends
   core/                 # events, intent, memory, companion policy, profiles, schemas
-  inference/            # swappable LLM brain: LiteRT (local) + OpenAI providers
+  inference/            # swappable brain (LiteRT/OpenAI) + selectable speech-to-text
   backends/             # laptop, fake, Unitree G1, LeKiwi
   integrations/         # optional MCP and web adapters
 frontend/

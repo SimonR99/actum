@@ -12,6 +12,14 @@ DEFAULT_PROVIDER_ENVS = {
     "anthropic": "ANTHROPIC_API_KEY",
 }
 
+STT_ENGINES = ("whisper", "openai", "model")
+
+DEFAULT_SPEECH = {
+    "stt_engine": "whisper",
+    "whisper_model": "base",
+    "whisper_compute": "auto",
+}
+
 
 class RuntimeSettings:
     def __init__(self, config: dict[str, Any], capability_names: list[str]):
@@ -35,6 +43,11 @@ class RuntimeSettings:
             provider_cfg.setdefault("api_key_env", env_name)
             if os.environ.get(str(provider_cfg["api_key_env"])):
                 provider_cfg["api_key_configured"] = True
+
+        raw_speech = config.get("speech", {}) if isinstance(config.get("speech"), dict) else {}
+        self.speech = {**DEFAULT_SPEECH, **raw_speech}
+        if str(self.speech.get("stt_engine")) not in STT_ENGINES:
+            self.speech["stt_engine"] = DEFAULT_SPEECH["stt_engine"]
 
     def set_model_provider(
         self,
@@ -61,6 +74,13 @@ class RuntimeSettings:
         self.models["active_provider"] = name
         return self.to_dict()["models"]
 
+    def set_stt_engine(self, engine: str) -> dict[str, Any]:
+        name = str(engine).strip().lower()
+        if name not in STT_ENGINES:
+            raise ValueError(f"Unknown STT engine {engine!r}. Choose one of: {', '.join(STT_ENGINES)}")
+        self.speech["stt_engine"] = name
+        return dict(self.speech)
+
     def set_tool_enabled(self, tool: str, enabled: bool):
         name = str(tool).strip()
         if not name:
@@ -86,6 +106,7 @@ class RuntimeSettings:
                 "enabled": sorted(self.enabled_tools),
                 "available": sorted(self._capability_names),
             },
+            "speech": {**self.speech, "available_stt": list(STT_ENGINES)},
         }
 
     def to_config(self, include_secrets: bool = False) -> dict[str, Any]:
