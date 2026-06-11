@@ -68,7 +68,7 @@ async function api(path, options = {}) {
 // actually said, then fall back to status/done text for direct interactions.
 function assistantTextFromTurn(turn) {
   const actions = turn.actions || [];
-  const spoken = actions.filter((a) => a.type === "speak" && a.text).map((a) => a.text);
+  const spoken = actions.filter((a) => (a.type === "speak" || a.type === "reply") && a.text).map((a) => a.text);
   if (spoken.length) return spoken.join("\n\n");
   const direct = ["chat", "language", "voice", "text"].includes(turn.source);
   if (!direct) return "";
@@ -253,6 +253,9 @@ function useActumState() {
           }
           if (msg.state_only) return;
           setBusy(false);
+          if (msg.error) {
+            showToast(msg.error);
+          }
           const text = assistantTextFromTurn(msg);
           if (text) {
             setMessages((current) => [
@@ -317,15 +320,12 @@ export default function App() {
 
   async function handleLanguageChange(nextLang) {
     try {
-      console.log("DEBUG handleLanguageChange nextLang:", nextLang, "strings:", STRINGS[nextLang]);
       setLang(nextLang);
-      const payload = await api("/settings/language", {
+      await api("/settings/language", {
         method: "POST",
         body: JSON.stringify({ language: nextLang, persist: true })
       });
-      const toastMsg = STRINGS[nextLang]?.["toast.languageUpdated"] || t("toast.languageUpdated");
-      console.log("DEBUG handleLanguageChange toastMsg:", toastMsg);
-      showToast(toastMsg);
+      showToast(STRINGS[nextLang]?.["toast.languageUpdated"] || t("toast.languageUpdated"));
       await refresh();
     } catch (error) {
       showToast(error.message);

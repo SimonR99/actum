@@ -201,8 +201,10 @@ def build_stt(settings: Any) -> STTEngine | None:
             language=lang or str(speech.get("whisper_language", "")),
         )
     if engine == "openai":
+        from actum.inference import resolve_api_key
+
         models = settings.to_config(include_secrets=True)["models"]
-        api_key = str(models.get("providers", {}).get("openai", {}).get("api_key", ""))
+        api_key = resolve_api_key(models.get("providers", {}).get("openai", {}))
         return OpenAISTT(
             model=str(speech.get("openai_transcribe_model", DEFAULT_OPENAI_TRANSCRIBE_MODEL)),
             api_key=api_key,

@@ -7,7 +7,6 @@ class FakeAgent:
         self.runtime = runtime
         self.config = config or (runtime.config if runtime is not None else {})
         self._pending_speech = []
-        self.memory = {}
 
 
 def test_navigate_uses_backend_when_available():
@@ -67,7 +66,7 @@ def test_remember_writes_to_runtime_memory(tmp_path):
 
     assert "Stored" in result
     assert runtime.memory.recall_fact("favorite_tool") == "torque wrench"
-    assert agent.memory["favorite_tool"] == "torque wrench"
+    assert tools.recall("favorite_tool") == "favorite_tool = torque wrench"
 
 
 def test_memory_observation_tools_record_structured_entries(tmp_path):

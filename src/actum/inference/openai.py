@@ -149,7 +149,12 @@ class OpenAIProvider(InferenceProvider):
     def _trim_history(self) -> None:
         if len(self._messages) <= _MAX_HISTORY + 1:
             return
-        self._messages = [self._messages[0], *self._messages[-_MAX_HISTORY:]]
+        tail = self._messages[-_MAX_HISTORY:]
+        # Tool replies must always follow the assistant message that requested
+        # them, or the API rejects the request. Drop leading orphans.
+        while tail and tail[0].get("role") == "tool":
+            tail.pop(0)
+        self._messages = [self._messages[0], *tail]
 
 
 def _image_block(blob: str) -> dict[str, Any]:

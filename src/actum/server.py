@@ -412,6 +412,7 @@ def attach_server(agent: RobotAgent, app: FastAPI):
                                 "ignored": bool(payload.get("ignored")),
                                 "state_only": bool(payload.get("state_only")),
                                 "reason": payload.get("reason", ""),
+                                "error": payload.get("error", ""),
                                 "companion": payload.get("companion", {}),
                             }
                         )
@@ -422,6 +423,9 @@ def attach_server(agent: RobotAgent, app: FastAPI):
                 await send_latest_frame()
         except WebSocketDisconnect:
             pass
+        except Exception as exc:
+            # Sends race against client disconnects; don't spam tracebacks.
+            print(f"[server] events stream closed: {exc}")
         finally:
             if q in agent._status_subscribers:
                 agent._status_subscribers.remove(q)
@@ -471,7 +475,7 @@ def _not_ready_response(app: FastAPI) -> JSONResponse | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     agent: RobotAgent = app.state.agent
     camera_stream: CameraFrameStream | None = getattr(app.state, "camera_stream", None)
     _init_server_state(app)

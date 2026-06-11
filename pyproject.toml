@@ -62,6 +62,9 @@ allow-direct-references = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# System-wide ROS 2 installs register pytest plugins (launch_testing, ament_*)
+# that can break collection when their own deps are missing. Disable them.
+addopts = "-p no:launch_ros -p no:launch_testing -p no:ament_copyright -p no:ament_flake8 -p no:ament_lint -p no:ament_pep257 -p no:ament_xmllint"
 
 # ── Jetson / aarch64 notes ─────────────────────────────────────────────────────
 # JetPack 6.x ships Python 3.10 — this package targets >=3.10.

@@ -59,16 +59,16 @@ Operating rules:
 3. Use look() before physical navigation, manipulation, or scene-dependent decisions.
 4. Chain tool calls in sequence to accomplish the goal.
 5. Use mark_step() as you move through the plan.
-5. Use memory tools for durable information:
+6. Use memory tools for durable information:
    - remember() for stable facts and preferences.
    - remember_person() for people and relationship context.
    - remember_place() and remember_spatial_note() for landmarks, docking spots, room layout, and mapping notes.
    - record_observation() for meaningful things you saw or events worth recalling.
    - record_map_observation() for landmarks, spatial relations, and map-building observations.
-6. Use update_body_perception() when body posture, contacts, held objects, or joint state matters.
-7. Use schedule_job() for recurring checks or reminders.
-8. Use web_fetch() or configured MCP tools for data tasks when local knowledge is insufficient.
-9. Always finish by calling done() with a one-sentence summary.
+7. Use update_body_perception() when body posture, contacts, held objects, or joint state matters.
+8. Use schedule_job() for recurring checks or reminders.
+9. Use web_fetch() or configured MCP tools for data tasks when local knowledge is insufficient.
+10. Always finish by calling done() with a one-sentence summary. Any final plain-text reply is shown to the operator in chat.
 
 Always-on companion behavior:
 - Direct chat, language/voice, and forced operator commands should be handled.
@@ -96,7 +96,6 @@ class RobotAgent:
         self.tts_backend: tts_module.TTSBackend | None = None
         self.tools: RobotTools | None = None
         self.runtime = RobotRuntime(self.config, self.get_name())
-        self.memory: dict[str, str] = self.runtime.memory.facts
 
         # Per-turn state (reset at the start of each process_event call)
         self._pending_speech: list[str] = []
@@ -124,16 +123,7 @@ class RobotAgent:
         """
         self.tts_backend = tts_module.load()
         self.tools = RobotTools(self)
-        system_prompt = _build_system_prompt(self.config, self.runtime)
-
-        self.provider = build_provider(
-            self.runtime.settings,
-            compute=self.runtime.compute_backend,
-            pop_pending_frame=self._pop_pending_frame,
-            resolve_model_path=_resolve_model_path,
-        )
-        print(f"Starting inference provider: {self.provider.name}…")
-        self.provider.start(system_prompt, self.tools.get_tools())
+        self._rebuild_provider()
 
         self.stt = build_stt(self.runtime.settings)
         if self.stt is not None and hasattr(self.stt, "_ensure_model"):
@@ -145,6 +135,27 @@ class RobotAgent:
         self._camera = open_camera()
         self._init_backend()
         print("Robot agent ready.")
+
+    def _rebuild_provider(self):
+        """(Re)build the inference provider from current settings.
+
+        Closes any live provider first (releases LiteRT engines / GPU memory),
+        then starts a fresh conversation with the current system prompt and
+        tool registry. Raises on failure; callers decide how to report it.
+        """
+        if self.tools is None:
+            raise RuntimeError("Agent tools are not initialised yet.")
+        if self.provider is not None:
+            self.provider.close()
+            self.provider = None
+        self.provider = build_provider(
+            self.runtime.settings,
+            compute=self.runtime.compute_backend,
+            pop_pending_frame=self._pop_pending_frame,
+            resolve_model_path=_resolve_model_path,
+        )
+        print(f"Starting inference provider: {self.provider.name}…")
+        self.provider.start(_build_system_prompt(self.config, self.runtime), self.tools.get_tools())
 
     def _pop_pending_frame(self) -> str | None:
         """Hand the most recent look() frame to the provider, then clear it."""
@@ -193,6 +204,18 @@ class RobotAgent:
 
         Returns a list of action records (one per tool call).
         """
+        if self.provider is None or self.tools is None:
+            payload = {
+                "source": event.get("source", "?"),
+                "actions": [],
+                "elapsed": 0.0,
+                "ignored": True,
+                "reason": "Agent models are not loaded yet.",
+            }
+            print(f"turn ignored | {event.get('source', '?')}: models not loaded")
+            self._broadcast(payload)
+            return []
+
         decision = self.runtime.should_process_event(event)
         if not decision.process:
             payload = {
@@ -218,10 +241,17 @@ class RobotAgent:
 
         # The provider runs the full tool-calling loop, including any look()
         # image follow-ups (it pops frames via self._pop_pending_frame).
-        await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: self.provider.send(content),
-        )
+        error = ""
+        final_text = ""
+        try:
+            final_text = await asyncio.get_running_loop().run_in_executor(
+                None,
+                lambda: self.provider.send(content),
+            ) or ""
+        except Exception as exc:
+            error = str(exc)
+            self.runtime.events.append("turn.error", "agent", message=error, event_source=event.get("source", "?"))
+            print(f"[agent] turn failed: {error}")
 
         elapsed = time.time() - t0
         action_types = [a["type"] for a in self.tools.actions_taken]
@@ -233,16 +263,31 @@ class RobotAgent:
             await self._speak(text)
 
         actions = list(self.tools.actions_taken)
+        # A final plain-text reply (no tool call) is still an answer for the
+        # operator — keep it instead of dropping it on the floor.
+        if final_text.strip():
+            actions.append({"type": "reply", "text": final_text.strip(), "time": time.time()})
+            self.runtime.events.append("agent.reply", "agent", text=final_text.strip())
         self._action_log.extend(actions)
         self._record_turn_memory(event, actions)
-        self._broadcast({"source": event.get("source", "?"), "actions": actions, "elapsed": elapsed})
+        self._broadcast(
+            {
+                "source": event.get("source", "?"),
+                "actions": actions,
+                "elapsed": elapsed,
+                "error": error,
+            }
+        )
         return actions
 
     def _record_turn_memory(self, event: dict, actions: list[dict]):
         source = str(event.get("source", "unknown"))
         done_summary = next((a.get("summary") for a in actions if a.get("type") == "done" and a.get("summary")), "")
+        reply = next((a.get("text") for a in actions if a.get("type") == "reply" and a.get("text")), "")
         if done_summary:
             summary = str(done_summary)
+        elif reply:
+            summary = str(reply)
         elif event.get("text"):
             summary = f"Processed {source} event: {event['text']}"
         else:
@@ -351,7 +396,7 @@ class RobotAgent:
         mode = self.get_mode()
         if mode == "unitree":
             if self.runtime.backend.name == "unitree_g1" and self.runtime.backend.connected:
-                result = await asyncio.get_event_loop().run_in_executor(None, lambda: self.runtime.backend.speak(text))
+                result = await asyncio.get_running_loop().run_in_executor(None, lambda: self.runtime.backend.speak(text))
                 if result.ok:
                     return
                 print(f"[tts] unitree speak failed; falling back to local ({result.message})")
@@ -366,7 +411,7 @@ class RobotAgent:
         try:
             language = self.config.get("language", "en")
             voice = "ff_siwis" if language == "fr" else "af_heart"
-            pcm = await asyncio.get_event_loop().run_in_executor(
+            pcm = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: self.tts_backend.generate(text, voice=voice)
             )
             print(f"[tts] playing {len(pcm) / self.tts_backend.sample_rate:.2f}s of audio")
@@ -379,7 +424,7 @@ class RobotAgent:
         try:
             import sounddevice as sd
             device = os.environ.get("ACTUM_AUDIO_DEVICE") or None
-            await asyncio.get_event_loop().run_in_executor(
+            await asyncio.get_running_loop().run_in_executor(
                 None, lambda: sd.play(pcm, samplerate=sr, device=device, blocking=True)
             )
         except Exception as e:
@@ -393,7 +438,7 @@ class RobotAgent:
                 cmd = f"aplay -D {device} '{path}'"
             else:
                 cmd = f"aplay '{path}' || afplay '{path}'"
-            ret = await asyncio.get_event_loop().run_in_executor(None, lambda: os.system(cmd))
+            ret = await asyncio.get_running_loop().run_in_executor(None, lambda: os.system(cmd))
             if ret != 0:
                 print(f"[tts] fallback playback also failed (exit {ret})")
 
@@ -423,6 +468,9 @@ class RobotAgent:
     async def background_loop(self):
         """Always-on autonomy loop for schedules and idle perception."""
         self._background_stop_requested = False
+        # Start the deliberation clock now so the robot doesn't self-task
+        # seconds after boot, before the operator has said anything.
+        self._last_deliberate_at = time.time()
         while not self._background_stop_requested:
             behavior = self.runtime.behavior
             await asyncio.sleep(max(1.0, behavior.tick_seconds))
@@ -524,7 +572,7 @@ class RobotAgent:
 
         if persist:
             try:
-                _persist_tts_mode(self._config_path, mode)
+                _persist_config_updates(self._config_path, {"tts": mode})
             except Exception as exc:
                 return False, f"Mode changed in memory but failed to save config: {exc}"
 
@@ -548,22 +596,11 @@ class RobotAgent:
             return False, str(exc)
         self.config["models"] = self.runtime.settings.to_config(include_secrets=False)["models"]
 
-        try:
-            old_provider = self.provider
-            if old_provider:
-                old_provider.close()
-                self.provider = None
-
-            self.provider = build_provider(
-                self.runtime.settings,
-                compute=self.runtime.compute_backend,
-                pop_pending_frame=self._pop_pending_frame,
-                resolve_model_path=_resolve_model_path,
-            )
-            system_prompt = _build_system_prompt(self.config, self.runtime)
-            self.provider.start(system_prompt, self.tools.get_tools())
-        except Exception as exc:
-            return False, f"Failed to switch to provider {provider}: {exc}"
+        if self.tools is not None:
+            try:
+                self._rebuild_provider()
+            except Exception as exc:
+                return False, f"Failed to switch to provider {provider}: {exc}"
 
         if persist:
             try:
@@ -581,22 +618,11 @@ class RobotAgent:
             return False, message
         self.config["active_profile"] = self.runtime.profiles.active_name
 
-        try:
-            old_provider = self.provider
-            if old_provider:
-                old_provider.close()
-                self.provider = None
-
-            self.provider = build_provider(
-                self.runtime.settings,
-                compute=self.runtime.compute_backend,
-                pop_pending_frame=self._pop_pending_frame,
-                resolve_model_path=_resolve_model_path,
-            )
-            system_prompt = _build_system_prompt(self.config, self.runtime)
-            self.provider.start(system_prompt, self.tools.get_tools())
-        except Exception as exc:
-            return False, f"Profile updated, but failed to reload model provider: {exc}"
+        if self.tools is not None:
+            try:
+                self._rebuild_provider()
+            except Exception as exc:
+                return False, f"Profile updated, but failed to reload model provider: {exc}"
 
         if persist:
             try:
@@ -631,10 +657,9 @@ class RobotAgent:
         # Re-build/re-initialize speech settings (STT)
         self.stt = build_stt(self.runtime.settings)
 
-        if self.provider:
+        if self.provider is not None:
             try:
-                system_prompt = _build_system_prompt(self.config, self.runtime)
-                self.provider.start(system_prompt, self.tools.get_tools())
+                self._rebuild_provider()
             except Exception as exc:
                 return False, f"Language set but failed to reload model provider: {exc}"
 
@@ -680,21 +705,6 @@ class RobotAgent:
             except Exception as exc:
                 return False, f"Robot name changed in memory but failed to save config: {exc}"
         return True, f"Robot name set to {clean_name}."
-
-    def set_robot_config(self, robot_config: dict, persist: bool = True) -> tuple[bool, str]:
-        try:
-            clean_config = _normalize_robot_config(robot_config, self.config.get("robot", {}))
-        except Exception as exc:
-            return False, str(exc)
-
-        connected, message = self.runtime.configure_robot(clean_config)
-        self.config["robot"] = clean_config
-        if persist:
-            try:
-                _persist_config_updates(self._config_path, {"robot": clean_config})
-            except Exception as exc:
-                return False, f"Robot config changed in memory but failed to save config: {exc}"
-        return True, message if connected else f"{message} Config was still applied."
 
     def set_robot_settings(
         self,
@@ -1095,11 +1105,6 @@ def _merge_dict(default: dict, override: dict) -> dict:
     return merged
 
 
-def _persist_tts_mode(config_path: str | Path, mode: str):
-    """Persist TTS mode while preserving any other config keys."""
-    _persist_config_updates(config_path, {"tts": mode})
-
-
 def _persist_config_updates(config_path: str | Path, updates: dict):
     """Persist a shallow/deep config patch while preserving other keys."""
     path = Path(config_path)
@@ -1123,7 +1128,7 @@ def cli():
 
 
 async def _run_headless():
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     agent = RobotAgent()
 
     print("Loading models…")

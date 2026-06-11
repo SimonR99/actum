@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Callable
 
 from actum.inference.base import InferenceProvider
+
+
+def resolve_api_key(provider_cfg: dict[str, Any]) -> str:
+    """API key for a provider config: explicit key first, then its env var."""
+    api_key = str(provider_cfg.get("api_key", "")).strip()
+    if api_key:
+        return api_key
+    env_name = str(provider_cfg.get("api_key_env", "")).strip()
+    return os.environ.get(env_name, "") if env_name else ""
 
 
 def build_provider(
@@ -40,7 +50,7 @@ def build_provider(
         return OpenAIProvider(
             model=model,
             pop_pending_frame=pop_pending_frame,
-            api_key=str(provider_cfg.get("api_key", "")),
+            api_key=resolve_api_key(provider_cfg),
         )
 
     if provider == "anthropic":
@@ -52,4 +62,4 @@ def build_provider(
     raise RuntimeError(f"Unknown inference provider: {provider!r}")
 
 
-__all__ = ["InferenceProvider", "build_provider"]
+__all__ = ["InferenceProvider", "build_provider", "resolve_api_key"]

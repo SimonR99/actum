@@ -288,11 +288,9 @@ class RobotTools:
             value: Value to store. Overwrites any existing value for this key.
         """
         store = self._memory_store
-        if store is not None:
-            store.remember_fact(key, value)
-            self._agent.memory = store.facts
-        else:
-            self._agent.memory[key] = value
+        if store is None:
+            return "Persistent memory is not available."
+        store.remember_fact(key, value)
         self._record("remember", key=key, value=value)
         print(f"[remember] {key!r} = {value!r}")
         return f"Stored: {key} = {value}"
@@ -304,13 +302,17 @@ class RobotTools:
             key: Key to look up.
         """
         store = self._memory_store
-        val = store.recall_fact(key) if store is not None else self._agent.memory.get(key)
+        if store is None:
+            return "Persistent memory is not available."
+        val = store.recall_fact(key)
         return f"{key} = {val}" if val is not None else f"No memory for key '{key}'."
 
     def list_memories(self) -> str:
         """List all keys currently stored in memory."""
         store = self._memory_store
-        facts = store.facts if store is not None else self._agent.memory
+        if store is None:
+            return "Persistent memory is not available."
+        facts = store.facts
         if not facts:
             return "Memory is empty."
         return "Memory:\n" + "\n".join(f"  {k}: {v}" for k, v in facts.items())
