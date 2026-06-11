@@ -26,7 +26,8 @@ const DEFAULT_ROBOT = {
   laptop: { webcam: true, microphone: true, speaker: true },
   fake: {},
   unitree_g1: { network_interface: "eth0", speaker_id: 0, volume: 80 },
-  lekiwi: { remote_ip: "127.0.0.1", port: 5555, id: "lekiwi" }
+  lekiwi: { remote_ip: "127.0.0.1", port: 5555, id: "lekiwi" },
+  ros2: { node_name: "actum_node", cmd_vel_topic: "/cmd_vel", odom_topic: "/odom", joint_states_topic: "/joint_states", gripper_topic: "/gripper_cmd" }
 };
 
 const DEFAULT_MODELS = {
@@ -965,6 +966,7 @@ function RobotSettings({ state, showToast, refresh }) {
             <option value="fake">Fake</option>
             <option value="unitree_g1">Unitree G1</option>
             <option value="lekiwi">LeKiwi</option>
+            <option value="ros2">ROS 2</option>
           </select>
         </Labeled>
       </div>
@@ -1006,6 +1008,26 @@ function RobotSettings({ state, showToast, refresh }) {
               <input className="field" value={robot.lekiwi.id} onChange={(event) => update(["lekiwi", "id"], event.target.value)} />
             </Labeled>
           </div>
+        </div>
+      ) : null}
+
+      {backend === "ros2" ? (
+        <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <Labeled label={t("robot.nodeName")}>
+            <input className="field" value={robot.ros2.node_name} onChange={(event) => update(["ros2", "node_name"], event.target.value)} />
+          </Labeled>
+          <Labeled label={t("robot.cmdVelTopic")}>
+            <input className="field" value={robot.ros2.cmd_vel_topic} onChange={(event) => update(["ros2", "cmd_vel_topic"], event.target.value)} />
+          </Labeled>
+          <Labeled label={t("robot.odomTopic")}>
+            <input className="field" value={robot.ros2.odom_topic} onChange={(event) => update(["ros2", "odom_topic"], event.target.value)} />
+          </Labeled>
+          <Labeled label={t("robot.jointStatesTopic")}>
+            <input className="field" value={robot.ros2.joint_states_topic} onChange={(event) => update(["ros2", "joint_states_topic"], event.target.value)} />
+          </Labeled>
+          <Labeled label={t("robot.gripperTopic")}>
+            <input className="field" value={robot.ros2.gripper_topic} onChange={(event) => update(["ros2", "gripper_topic"], event.target.value)} />
+          </Labeled>
         </div>
       ) : null}
 
@@ -1311,7 +1333,8 @@ function mergeRobot(config) {
     laptop: { ...DEFAULT_ROBOT.laptop, ...(config.laptop || {}) },
     fake: { ...(config.fake || {}) },
     unitree_g1: { ...DEFAULT_ROBOT.unitree_g1, ...(config.unitree_g1 || {}) },
-    lekiwi: { ...DEFAULT_ROBOT.lekiwi, ...(config.lekiwi || {}) }
+    lekiwi: { ...DEFAULT_ROBOT.lekiwi, ...(config.lekiwi || {}) },
+    ros2: { ...DEFAULT_ROBOT.ros2, ...(config.ros2 || {}) }
   };
 }
 

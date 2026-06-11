@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     libssl-dev \
     ffmpeg \
+    libvulkan1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
@@ -71,7 +72,8 @@ COPY src ./src
 #   openai  → cloud inference provider (fast profile)
 #   whisper → local speech-to-text (default STT engine)
 #   mcp     → trusted external tool servers
-RUN pip install -e ".[camera,openai,whisper,mcp]"
+#   unitree → Unitree G1 robot backend (DDS-based locomotion)
+RUN pip install -e ".[camera,openai,whisper,mcp,unitree]"
 
 # Pre-download models to avoid runtime delays (optional but recommended).
 # Comment out if you want a smaller image; models will download on first run.
@@ -107,7 +109,7 @@ RUN mkdir -p /workspace/models /workspace/config /workspace/logs
 RUN echo "pcm.!default { type hw card 0 }" > /etc/asound.conf
 
 # Default environment variables
-ENV MODEL_PATH=/root/.cache/huggingface/hub/litert-community/gemma-4-E2B-it-litert-lm/snapshots/*/gemma-4-E2B-it.litertlm \
+ENV MODEL_PATH=/root/.cache/huggingface/models--litert-community--gemma-4-E2B-it-litert-lm/snapshots/*/gemma-4-E2B-it.litertlm \
     PORT=8000 \
     PYTHONPATH=/workspace/src:${PYTHONPATH}
 

@@ -70,7 +70,7 @@ COPY src ./src
 # Bundle cloud + local-STT + MCP so the image is self-contained.
 # Note: On Jetson, consider onnxruntime-gpu for TTS; faster-whisper runs on CPU
 # unless a CUDA build of ctranslate2 is installed.
-RUN pip install -e ".[camera,openai,whisper,mcp]"
+RUN pip install -e ".[camera,openai,whisper,mcp,unitree]"
 
 # Pre-download models (optional, helps on first run)
 # Comment out if you want a smaller image

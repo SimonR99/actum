@@ -16,7 +16,7 @@ from typing import Any, Callable
 
 from actum.inference.base import InferenceProvider, build_tool_schema
 
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MODEL = "gpt-5.4-nano-2026-03-17"
 DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe"
 _MAX_TOOL_ROUNDS = 12
 _MAX_HISTORY = 40  # messages kept after the system prompt

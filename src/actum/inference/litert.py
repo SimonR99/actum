@@ -70,7 +70,28 @@ class LiteRTProvider(InferenceProvider):
                 audio_backend=litert_lm.Backend.CPU,
             )
         except Exception as exc:
-            if "Vision Encoder" in str(exc) or "vision" in str(exc).lower():
+            if compute != litert_lm.Backend.CPU:
+                print(f"[litert] GPU backend failed to initialize ({exc}); falling back to CPU")
+                compute = litert_lm.Backend.CPU
+                try:
+                    self._engine = litert_lm.Engine(
+                        model_path,
+                        backend=compute,
+                        vision_backend=compute,
+                        audio_backend=litert_lm.Backend.CPU,
+                    )
+                except Exception as exc2:
+                    if "Vision Encoder" in str(exc2) or "vision" in str(exc2).lower():
+                        print(f"[litert] vision encoder unavailable ({exc2}); retrying on CPU without vision")
+                        self.supports_vision = False
+                        self._engine = litert_lm.Engine(
+                            model_path,
+                            backend=compute,
+                            audio_backend=litert_lm.Backend.CPU,
+                        )
+                    else:
+                        raise
+            elif "Vision Encoder" in str(exc) or "vision" in str(exc).lower():
                 print(f"[litert] vision encoder unavailable ({exc}); retrying without vision")
                 self.supports_vision = False
                 self._engine = litert_lm.Engine(
@@ -88,19 +109,31 @@ class LiteRTProvider(InferenceProvider):
         self._conversation.__enter__()
 
     def send(self, content: list[dict[str, Any]]) -> str:
+        if not self.supports_vision:
+            content = [item for item in content if item.get("type") != "image"]
         self._conversation.send_message({"role": "user", "content": content})
         for _ in range(_MAX_FRAME_FOLLOWUPS):
             frame = self._pop_pending_frame()
             if not frame:
                 break
-            follow_up = [
-                {"type": "image", "blob": frame},
-                {
-                    "type": "text",
-                    "text": "This is the camera frame you requested with look(). "
-                    "Describe what you see and continue your task.",
-                },
-            ]
+            if not self.supports_vision:
+                follow_up = [
+                    {
+                        "type": "text",
+                        "text": "This is the camera frame you requested with look(). "
+                        "Note: Vision is currently unavailable or unsupported on this backend. "
+                        "Explain this constraint to the operator and continue.",
+                    }
+                ]
+            else:
+                follow_up = [
+                    {"type": "image", "blob": frame},
+                    {
+                        "type": "text",
+                        "text": "This is the camera frame you requested with look(). "
+                        "Describe what you see and continue your task.",
+                    },
+                ]
             self._conversation.send_message({"role": "user", "content": follow_up})
         return ""
 

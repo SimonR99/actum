@@ -93,7 +93,7 @@
       },
       "openai": {
         "enabled": false,
-        "model": "gpt-4o-mini",
+        "model": "gpt-5.4-nano-2026-03-17",
         "api_key_env": "OPENAI_API_KEY"
       },
       "anthropic": {

@@ -135,6 +135,11 @@ class RobotAgent:
         self.provider.start(system_prompt, self.tools.get_tools())
 
         self.stt = build_stt(self.runtime.settings)
+        if self.stt is not None and hasattr(self.stt, "_ensure_model"):
+            try:
+                self.stt._ensure_model()
+            except Exception as e:
+                print(f"[stt] warning: failed to preload model: {e}")
 
         self._camera = open_camera()
         self._init_backend()
@@ -536,6 +541,24 @@ class RobotAgent:
         except Exception as exc:
             return False, str(exc)
         self.config["models"] = self.runtime.settings.to_config(include_secrets=False)["models"]
+
+        try:
+            old_provider = self.provider
+            if old_provider:
+                old_provider.close()
+                self.provider = None
+
+            self.provider = build_provider(
+                self.runtime.settings,
+                compute=self.runtime.compute_backend,
+                pop_pending_frame=self._pop_pending_frame,
+                resolve_model_path=_resolve_model_path,
+            )
+            system_prompt = _build_system_prompt(self.config, self.runtime)
+            self.provider.start(system_prompt, self.tools.get_tools())
+        except Exception as exc:
+            return False, f"Failed to switch to provider {provider}: {exc}"
+
         if persist:
             try:
                 _persist_config_updates(
@@ -551,6 +574,24 @@ class RobotAgent:
         if not ok:
             return False, message
         self.config["active_profile"] = self.runtime.profiles.active_name
+
+        try:
+            old_provider = self.provider
+            if old_provider:
+                old_provider.close()
+                self.provider = None
+
+            self.provider = build_provider(
+                self.runtime.settings,
+                compute=self.runtime.compute_backend,
+                pop_pending_frame=self._pop_pending_frame,
+                resolve_model_path=_resolve_model_path,
+            )
+            system_prompt = _build_system_prompt(self.config, self.runtime)
+            self.provider.start(system_prompt, self.tools.get_tools())
+        except Exception as exc:
+            return False, f"Profile updated, but failed to reload model provider: {exc}"
+
         if persist:
             try:
                 _persist_config_updates(self._config_path, {"active_profile": self.runtime.profiles.active_name})
@@ -736,6 +777,12 @@ def _format_backend_block(runtime: RobotRuntime) -> str:
         return "- Backend: Unitree G1 humanoid. Use bounded movement and gestures cautiously."
     if runtime.backend.name == "lekiwi":
         return "- Backend: LeKiwi / LeRobot-compatible robot. Use backend results to verify action success."
+    if runtime.backend.name == "ros2":
+        return (
+            f"- Backend: ROS 2 node ({metadata.get('node_name')}).\n"
+            f"- Subscribed topics: {metadata.get('odom_topic')} (odom), {metadata.get('joint_states_topic')} (joints).\n"
+            f"- Published topics: {metadata.get('cmd_vel_topic')} (velocity), {metadata.get('gripper_topic')} (gripper)."
+        )
     return f"- Backend: {runtime.backend.name}. Respect capability results and avoid assuming unsupported hardware."
 
 
@@ -872,7 +919,7 @@ def _default_config() -> dict:
                 },
                 "openai": {
                     "enabled": False,
-                    "model": "gpt-4o-mini",
+                    "model": "gpt-5.4-nano-2026-03-17",
                     "api_key_env": "OPENAI_API_KEY",
                 },
                 "anthropic": {
@@ -915,6 +962,15 @@ def _default_config() -> dict:
                 "port": 5555,
                 "id": "lekiwi",
             },
+            "ros2": {
+                "node_name": "actum_node",
+                "cmd_vel_topic": "/cmd_vel",
+                "odom_topic": "/odom",
+                "joint_states_topic": "/joint_states",
+                "gripper_topic": "/gripper_cmd",
+                "linear_speed": 0.25,
+                "angular_speed": 0.5,
+            },
         },
         "mcp": {
             "enabled": False,
@@ -923,7 +979,7 @@ def _default_config() -> dict:
     }
 
 
-SUPPORTED_ROBOT_BACKENDS = {"laptop", "fake", "unitree_g1", "lekiwi"}
+SUPPORTED_ROBOT_BACKENDS = {"laptop", "fake", "unitree_g1", "lekiwi", "ros2"}
 
 
 def _normalize_robot_config(robot_config: dict, current_robot_config: dict | None = None) -> dict:
@@ -963,6 +1019,17 @@ def _normalize_robot_config(robot_config: dict, current_robot_config: dict | Non
         "remote_ip": str(lekiwi.get("remote_ip", "127.0.0.1")).strip() or "127.0.0.1",
         "port": _coerce_int(lekiwi.get("port", 5555), 5555, 1, 65535),
         "id": str(lekiwi.get("id", "lekiwi")).strip() or "lekiwi",
+    }
+
+    ros2 = merged.get("ros2", {}) if isinstance(merged.get("ros2"), dict) else {}
+    merged["ros2"] = {
+        "node_name": str(ros2.get("node_name", "actum_node")).strip() or "actum_node",
+        "cmd_vel_topic": str(ros2.get("cmd_vel_topic", "/cmd_vel")).strip() or "/cmd_vel",
+        "odom_topic": str(ros2.get("odom_topic", "/odom")).strip() or "/odom",
+        "joint_states_topic": str(ros2.get("joint_states_topic", "/joint_states")).strip() or "/joint_states",
+        "gripper_topic": str(ros2.get("gripper_topic", "/gripper_cmd")).strip() or "/gripper_cmd",
+        "linear_speed": float(ros2.get("linear_speed", 0.25)),
+        "angular_speed": float(ros2.get("angular_speed", 0.5)),
     }
     if "_backend_options" in merged:
         merged["_backend_options"] = str(merged["_backend_options"])

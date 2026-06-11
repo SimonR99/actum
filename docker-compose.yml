@@ -30,7 +30,7 @@ services:
     # Environment variables
     environment:
       - PORT=8000
-      - MODEL_PATH=/root/.cache/huggingface/hub/litert-community/gemma-4-E2B-it-litert-lm/snapshots/*/gemma-4-E2B-it.litertlm
+      - MODEL_PATH=/root/.cache/huggingface/models--litert-community--gemma-4-E2B-it-litert-lm/snapshots/*/gemma-4-E2B-it.litertlm
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       # Audio device (adjust if needed: hw:1,0 for different card)
@@ -55,13 +55,13 @@ services:
       # - /dev/snd:/dev/snd            # Audio devices
       # - /dev/video0:/dev/video0      # Camera device (USB or CSI)
     
-    # Ports
-    ports:
-      - "8000:8000"  # Web dashboard (headless mode: not used)
+    # Ports: in network_mode: host, ports mapping is not needed as the container
+    # shares the host network namespace.
+    # ports:
+    #   - "8000:8000"  # Web dashboard (headless mode: not used)
     
-    # Allow container to access host network (for robot communication if needed)
-    # Uncomment if robot is on a different interface:
-    # network_mode: host
+    # Allow container to access host network (essential for CycloneDDS multicast communication)
+    network_mode: host
     
     # Interactive terminal (for text input)
     stdin_open: true

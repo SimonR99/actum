@@ -9,6 +9,7 @@ from actum.backends.fake import FakeBackend
 from actum.backends.laptop import LaptopBackend
 from actum.backends.lekiwi import LeKiwiBackend
 from actum.backends.unitree_g1 import UnitreeG1Backend
+from actum.backends.ros2 import ROS2Backend
 
 
 def create_backend(config: dict[str, Any]) -> RobotBackend:
@@ -24,4 +25,6 @@ def create_backend(config: dict[str, Any]) -> RobotBackend:
         return UnitreeG1Backend(backend_cfg)
     if backend_name == "lekiwi":
         return LeKiwiBackend(backend_cfg)
+    if backend_name == "ros2":
+        return ROS2Backend(backend_cfg)
     raise ValueError(f"Unsupported robot backend: {backend_name!r}")

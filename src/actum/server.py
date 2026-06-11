@@ -286,13 +286,17 @@ def attach_server(agent: RobotAgent, app: FastAPI):
 
     @app.post("/settings/model")
     async def settings_model(body: dict):
-        ok, message = agent.set_model_provider(
-            body.get("provider", ""),
-            model=body.get("model", ""),
-            api_key=body.get("api_key", ""),
-            enabled=body.get("enabled"),
-            persist=bool(body.get("persist", False)),
-            persist_secret=bool(body.get("persist_secret", False)),
+        loop = asyncio.get_running_loop()
+        ok, message = await loop.run_in_executor(
+            None,
+            lambda: agent.set_model_provider(
+                body.get("provider", ""),
+                model=body.get("model", ""),
+                api_key=body.get("api_key", ""),
+                enabled=body.get("enabled"),
+                persist=bool(body.get("persist", False)),
+                persist_secret=bool(body.get("persist_secret", False)),
+            )
         )
         return JSONResponse(
             {"ok": ok, "message": message, "settings": agent.runtime.settings.to_dict()},
@@ -301,7 +305,11 @@ def attach_server(agent: RobotAgent, app: FastAPI):
 
     @app.post("/settings/profile")
     async def settings_profile(body: dict):
-        ok, message = agent.set_profile(body.get("profile", ""), persist=bool(body.get("persist", True)))
+        loop = asyncio.get_running_loop()
+        ok, message = await loop.run_in_executor(
+            None,
+            lambda: agent.set_profile(body.get("profile", ""), persist=bool(body.get("persist", True)))
+        )
         return JSONResponse(
             {"ok": ok, "message": message, "profile": agent.runtime.profiles.to_dict()},
             status_code=200 if ok else 400,

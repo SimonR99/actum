@@ -141,8 +141,7 @@ class RobotRuntime:
     def set_profile(self, name: str) -> tuple[bool, str]:
         """Switch the active speed profile and apply its loop-rate knobs.
 
-        Note: the inference provider/compute backend only change after the next
-        model load, since the engine is constructed at startup.
+        Note: the inference provider/compute backend will change live.
         """
         try:
             profile = self.profiles.set_active(name)
@@ -153,9 +152,8 @@ class RobotRuntime:
         self.config["active_profile"] = self.profiles.active_name
         self.events.append("profile.active", "operator", profile=self.profiles.active_name, resolved=profile)
         provider = str(profile["provider"]).lower()
+        self.settings.models["active_provider"] = provider
         note = f"Profile set to {self.profiles.active_name}."
-        if provider != str(self.settings.models.get("active_provider", "")).lower():
-            note += f" Restart the runtime to switch the inference provider to '{provider}'."
         return True, note
 
     def maybe_consolidate_memory(self) -> dict[str, Any] | None:
