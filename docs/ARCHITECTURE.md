@@ -42,6 +42,74 @@ This keeps the robot dependable even if the agent framework changes.
    - Shows triggers, camera, action trace, plan/intent, behavior tree, memory, live map, body perception, robot/backend settings, model/tool settings, and tool graph.
    - Built as a React/Tailwind frontend in `frontend/`, served from `frontend/dist` by the FastAPI server.
 
+## Runtime Loops
+
+Five loops run concurrently. Everything that wants the LLM's attention goes through one
+funnel: the `event_bus` → companion gate → agent turn. Nothing else may touch the model.
+
+```mermaid
+flowchart TB
+    subgraph inputs["Input loops (threads)"]
+        MIC["Mic loop<br/>AudioCapture + EnergyVAD<br/>(muted while robot speaks)"]
+        CAM["Camera stream loop<br/>CameraFrameStream<br/>(dashboard frames only)"]
+    end
+
+    subgraph operator["Operator"]
+        UI["Dashboard<br/>chat / voice / look / reset"]
+        API["HTTP API<br/>/command /trigger /settings/*"]
+    end
+
+    subgraph background["Background loop (async, every tick_seconds)"]
+        CRON["Cron jobs due"]
+        CONT["Task continuation<br/>(plan active + stalled, max 3 nudges<br/>then task marked blocked)"]
+        DELIB["Deliberate tick<br/>(idle + deliberate_seconds elapsed)"]
+        IDLE["Idle vision review<br/>(idle + idle_review_seconds elapsed)"]
+        MAINT["Memory consolidation<br/>(dedupe/trim every consolidate_seconds)"]
+    end
+
+    BUS[("event_bus")]
+    GATE{"CompanionPolicy<br/>direct? forced? safety?<br/>importance ≥ threshold?"}
+    IGN["Ignored<br/>(logged + broadcast why)"]
+
+    subgraph turn["Agent turn (process_event)"]
+        CTX["Build content:<br/>STT transcript + image +<br/>instruction + relevant memory"]
+        PROV["InferenceProvider<br/>LiteRT (internal tool loop)<br/>OpenAI (explicit tool loop, ≤12 rounds)"]
+        TOOLS["RobotTools<br/>plan / look / navigate / speak /<br/>memory / MCP / done"]
+        BACKEND["RobotBackend<br/>laptop | fake | unitree_g1 | lekiwi | ros2"]
+    end
+
+    SPEAK["TTS queue → speaker<br/>(pauses mic)"]
+    STATE["RobotRuntime state<br/>intent · behavior tree · memory ·<br/>map · body · scene · events · tool graph"]
+    WS["WS /events broadcast<br/>turns · state · frames · errors"]
+
+    MIC -->|"voice utterance (+frame)"| BUS
+    UI --> API --> BUS
+    CRON --> BUS
+    CONT --> BUS
+    DELIB --> BUS
+    IDLE -->|"frame + importance"| BUS
+
+    BUS --> GATE
+    GATE -->|admit| CTX
+    GATE -->|ignore| IGN --> WS
+    CTX --> PROV
+    PROV <-->|"tool calls / results"| TOOLS
+    TOOLS --> BACKEND
+    TOOLS --> STATE
+    TOOLS -->|"look() frame"| PROV
+    PROV -->|"speak() + final reply"| SPEAK
+    PROV -->|"reply / done / error"| STATE
+    STATE --> WS
+    CAM --> WS
+    WS --> UI
+```
+
+Loop cadences come from the active speed profile: `tick_seconds` drives the background
+loop, `idle_review_seconds` the vision review, `deliberate_seconds` the self-tasking
+tick, and `camera_fps` the dashboard stream. A conversation reset
+(`POST /conversation/reset`) clears the provider history and live intent but keeps
+durable memory, the event log, and the tool graph.
+
 ## Framework Strategy
 
 Preferred integration order:

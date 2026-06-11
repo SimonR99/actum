@@ -351,6 +351,17 @@ def attach_server(agent: RobotAgent, app: FastAPI):
             status_code=200 if ok else 400,
         )
 
+    @app.post("/conversation/reset")
+    async def conversation_reset():
+        not_ready = _not_ready_response(app)
+        if not_ready:
+            return not_ready
+        ok, message = await asyncio.get_running_loop().run_in_executor(None, agent.reset_conversation)
+        return JSONResponse(
+            {"ok": ok, "message": message, "state": agent.runtime.snapshot()},
+            status_code=200 if ok else 400,
+        )
+
     @app.post("/cron")
     async def cron_add(body: dict):
         name = str(body.get("name") or "").strip()
@@ -508,6 +519,7 @@ async def lifespan(app: FastAPI):
 
         mic = AudioCapture(on_speech)
         app.state.mic = mic
+        agent.mic = mic
         threading.Thread(target=mic.run, daemon=True).start()
 
         app.state.agent_task = asyncio.create_task(agent.run())

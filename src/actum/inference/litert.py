@@ -52,6 +52,8 @@ class LiteRTProvider(InferenceProvider):
         self._resolve_model_path = resolve_model_path
         self._engine: Any = None
         self._conversation: Any = None
+        self._system_prompt = ""
+        self._tools: list[Callable[..., Any]] = []
 
     def start(self, system_prompt: str, tools: list[Callable[..., Any]]) -> None:
         if litert_lm is None:
@@ -102,11 +104,25 @@ class LiteRTProvider(InferenceProvider):
             else:
                 raise
         self._engine.__enter__()
+        self._system_prompt = system_prompt
+        self._tools = list(tools)
+        self._open_conversation()
+
+    def _open_conversation(self) -> None:
         self._conversation = self._engine.create_conversation(
-            messages=[{"role": "system", "content": system_prompt}],
-            tools=tools,
+            messages=[{"role": "system", "content": self._system_prompt}],
+            tools=self._tools,
         )
         self._conversation.__enter__()
+
+    def reset(self) -> None:
+        """Drop the conversation and start a fresh one on the same engine."""
+        if self._engine is None:
+            return
+        if self._conversation is not None:
+            self._conversation.__exit__(None, None, None)
+            self._conversation = None
+        self._open_conversation()
 
     def send(self, content: list[dict[str, Any]]) -> str:
         if not self.supports_vision:

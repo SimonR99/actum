@@ -43,6 +43,10 @@ from actum.perception import AudioCapture, open_camera, capture_jpeg
 HF_REPO = "litert-community/gemma-4-E2B-it-litert-lm"
 HF_FILENAME = "gemma-4-E2B-it.litertlm"
 
+# How many times the background loop re-prompts a stalled active task before
+# marking it blocked instead of looping forever.
+_MAX_TASK_CONTINUATIONS = 3
+
 SYSTEM_PROMPT_TEMPLATE = """\
 You are {robot_name}, an autonomous companion and robot agent. You perceive the world through \
 available sensors, act through registered tools, and keep the human operator informed through \
@@ -95,6 +99,7 @@ class RobotAgent:
         self.stt = None
         self.tts_backend: tts_module.TTSBackend | None = None
         self.tools: RobotTools | None = None
+        self.mic: AudioCapture | None = None  # set by server.py / _run_headless
         self.runtime = RobotRuntime(self.config, self.get_name())
 
         # Per-turn state (reset at the start of each process_event call)
@@ -112,6 +117,10 @@ class RobotAgent:
         self._camera_lock = threading.Lock()
         self._background_stop_requested = False
         self._last_deliberate_at = 0.0
+        # Task-continuation state: how many times the loop nudged the current
+        # goal forward without the model finishing it.
+        self._continued_goal = ""
+        self._continuation_attempts = 0
 
     # ── Startup / shutdown ─────────────────────────────────────────────────
 
@@ -268,6 +277,13 @@ class RobotAgent:
         if final_text.strip():
             actions.append({"type": "reply", "text": final_text.strip(), "time": time.time()})
             self.runtime.events.append("agent.reply", "agent", text=final_text.strip())
+        # Vision turns leave a visible "what I last saw" summary for the operator.
+        if str(event.get("source", "")) == "vision":
+            scene = next(
+                (a.get("summary") for a in actions if a.get("type") == "done" and a.get("summary")),
+                "",
+            ) or final_text.strip()
+            self.runtime.set_scene(scene, source="vision")
         self._action_log.extend(actions)
         self._record_turn_memory(event, actions)
         self._broadcast(
@@ -362,6 +378,15 @@ class RobotAgent:
                 f"Background autonomy loop tick. {event.get('text', 'Keep waiting and maintain situational awareness.')} "
                 "Update the behavior tree. Only use disruptive tools if needed. Call done() when finished."
             )
+        elif src == "continue":
+            goal = event.get("text") or self.runtime.intent.goal or "your current task"
+            active = self.runtime.intent.active_step_id or "unknown"
+            instruction = (
+                f"Your task is not finished. Goal: {goal} (active step: {active}). "
+                "Continue with the next concrete step using your tools, and mark progress with mark_step(). "
+                "If the goal is complete, call done() with a summary. "
+                "If you are blocked, call report_status() explaining why, then done()."
+            )
         elif src == "deliberate":
             instruction = (
                 "Self-directed planning tick. Review your standing goals, recent memory, and what you know "
@@ -392,7 +417,17 @@ class RobotAgent:
     async def _speak(self, text: str):
         if not text.strip():
             return
+        # Mute the mic while the robot talks so it doesn't transcribe its own
+        # voice and trigger itself in a feedback loop.
+        if self.mic is not None:
+            self.mic.pause()
+        try:
+            await self._speak_unmuted(text)
+        finally:
+            if self.mic is not None:
+                self.mic.resume()
 
+    async def _speak_unmuted(self, text: str):
         mode = self.get_mode()
         if mode == "unitree":
             if self.runtime.backend.name == "unitree_g1" and self.runtime.backend.connected:
@@ -466,91 +501,143 @@ class RobotAgent:
                 print(f"[agent] error: {e}")
 
     async def background_loop(self):
-        """Always-on autonomy loop for schedules and idle perception."""
+        """Always-on autonomy loop for schedules, task continuation, and idle perception."""
         self._background_stop_requested = False
         # Start the deliberation clock now so the robot doesn't self-task
         # seconds after boot, before the operator has said anything.
         self._last_deliberate_at = time.time()
         while not self._background_stop_requested:
-            behavior = self.runtime.behavior
-            await asyncio.sleep(max(1.0, behavior.tick_seconds))
+            await asyncio.sleep(max(1.0, self.runtime.behavior.tick_seconds))
             if self._background_stop_requested:
                 break
+            await self._background_tick()
 
-            # Self-maintenance: keep memory tidy without operator involvement.
-            self.runtime.maybe_consolidate_memory()
+    async def _background_tick(self):
+        """One pass of the autonomy loop. Split out so tests can drive it."""
+        behavior = self.runtime.behavior
 
-            queued = False
-            for job in self.runtime.cron.due():
-                self.runtime.cron.mark_run(job.id)
-                behavior.tick("scheduled job", job.name, "cron")
-                await self.event_bus.put(
-                    {
-                        "source": "cron",
-                        "text": job.instruction,
-                        "cron_job_id": job.id,
-                        "force": True,
-                    }
-                )
-                queued = True
+        # Self-maintenance: keep memory tidy without operator involvement.
+        self.runtime.maybe_consolidate_memory()
 
-            idle = self.runtime.intent.status in {"idle", "done", "blocked"} or not self.runtime.intent.goal
+        queued = False
+        for job in self.runtime.cron.due():
+            self.runtime.cron.mark_run(job.id)
+            behavior.tick("scheduled job", job.name, "cron")
+            await self.event_bus.put(
+                {
+                    "source": "cron",
+                    "text": job.instruction,
+                    "cron_job_id": job.id,
+                    "force": True,
+                }
+            )
+            queued = True
 
-            # Self-directed deliberation: when idle, periodically let the robot
-            # review its goals/memory and set its own task.
-            deliberate_seconds = self.runtime.deliberate_seconds
+        intent = self.runtime.intent
+        idle = intent.status in {"idle", "done", "blocked"} or not intent.goal
+
+        # Task continuation: if a plan is active but the model stopped calling
+        # tools (no done(), no progress), nudge it forward instead of letting
+        # the task hang. Capped so a stuck goal fails visibly instead of
+        # looping forever.
+        if not idle and behavior.enabled:
+            if intent.goal != self._continued_goal:
+                self._continued_goal = intent.goal
+                self._continuation_attempts = 0
+            stalled_s = time.time() - intent.updated_at
             if (
-                idle
-                and behavior.enabled
-                and not queued
-                and deliberate_seconds > 0
+                not queued
                 and self.event_bus.empty()
-                and (time.time() - self._last_deliberate_at) >= deliberate_seconds
+                and stalled_s >= max(2.0 * behavior.tick_seconds, 20.0)
             ):
-                self._last_deliberate_at = time.time()
-                behavior.tick("deliberate", "Reviewing goals and memory for useful next steps.", "deliberate")
-                await self.event_bus.put(
-                    {
-                        "source": "deliberate",
-                        "text": "Decide if there is something useful and safe to do or prepare right now.",
-                        "force": True,
-                    }
-                )
-                queued = True
-            if (
-                idle
-                and behavior.enabled
-                and behavior.idle_review
-                and not queued
-                and self.event_bus.empty()
-                and (time.time() - behavior.last_idle_review_at) >= behavior.idle_review_seconds
-            ):
-                frame = self.capture_frame()
-                if frame:
-                    behavior.last_idle_review_at = time.time()
-                    behavior.tick("perception", "Reviewing the current camera frame.", "vision")
-                    await self.event_bus.put(
-                        {
-                            "source": "vision",
-                            "text": (
-                                "Background vision review: update observations, map, body perception, "
-                                "or behavior state if useful. Stay quiet unless action is needed."
-                            ),
-                            "image": frame,
-                            "importance": behavior.idle_importance,
-                            "force": behavior.force_idle_reviews,
-                        }
+                if self._continuation_attempts >= _MAX_TASK_CONTINUATIONS:
+                    self.runtime.fail_task(
+                        "Task stalled: no progress after repeated continuation prompts."
                     )
-                    queued = True
                 else:
-                    behavior.set_waiting("No camera frame; waiting for chat, language, vision, or schedule trigger.")
+                    self._continuation_attempts += 1
+                    behavior.tick("continue task", intent.goal, "continue")
+                    await self.event_bus.put({"source": "continue", "text": intent.goal, "force": True})
+                    queued = True
+        elif idle:
+            self._continued_goal = ""
+            self._continuation_attempts = 0
 
-            if idle and not queued:
-                behavior.set_waiting("Waiting for chat, language, vision, or schedule trigger.")
-            self._broadcast({"source": "loop", "actions": [], "elapsed": 0.0, "state_only": True})
+        # Self-directed deliberation: when idle, periodically let the robot
+        # review its goals/memory and set its own task.
+        deliberate_seconds = self.runtime.deliberate_seconds
+        if (
+            idle
+            and behavior.enabled
+            and not queued
+            and deliberate_seconds > 0
+            and self.event_bus.empty()
+            and (time.time() - self._last_deliberate_at) >= deliberate_seconds
+        ):
+            self._last_deliberate_at = time.time()
+            behavior.tick("deliberate", "Reviewing goals and memory for useful next steps.", "deliberate")
+            await self.event_bus.put(
+                {
+                    "source": "deliberate",
+                    "text": "Decide if there is something useful and safe to do or prepare right now.",
+                    "force": True,
+                }
+            )
+            queued = True
+        if (
+            idle
+            and behavior.enabled
+            and behavior.idle_review
+            and not queued
+            and self.event_bus.empty()
+            and (time.time() - behavior.last_idle_review_at) >= behavior.idle_review_seconds
+        ):
+            frame = self.capture_frame()
+            if frame:
+                behavior.last_idle_review_at = time.time()
+                behavior.tick("perception", "Reviewing the current camera frame.", "vision")
+                await self.event_bus.put(
+                    {
+                        "source": "vision",
+                        "text": (
+                            "Background vision review: update observations, map, body perception, "
+                            "or behavior state if useful. Stay quiet unless action is needed."
+                        ),
+                        "image": frame,
+                        "importance": behavior.idle_importance,
+                        "force": behavior.force_idle_reviews,
+                    }
+                )
+                queued = True
+            else:
+                behavior.set_waiting("No camera frame; waiting for chat, language, vision, or schedule trigger.")
+
+        if idle and not queued:
+            behavior.set_waiting("Waiting for chat, language, vision, or schedule trigger.")
+        self._broadcast({"source": "loop", "actions": [], "elapsed": 0.0, "state_only": True})
 
     def stop_background_loop(self):
         self._background_stop_requested = True
+
+    # ── Conversation lifecycle ────────────────────────────────────────────
+
+    def reset_conversation(self) -> tuple[bool, str]:
+        """Forget the LLM conversation and clear the live task state.
+
+        Durable memory and the event log survive; only the dialogue history,
+        intent, and behavior tree are reset.
+        """
+        if self.provider is None:
+            return False, "Agent models are not loaded yet."
+        try:
+            self.provider.reset()
+        except Exception as exc:
+            return False, f"Failed to reset conversation: {exc}"
+        self.runtime.reset_session()
+        self._continued_goal = ""
+        self._continuation_attempts = 0
+        self._broadcast({"source": "operator", "actions": [], "elapsed": 0.0, "state_only": True})
+        return True, "Conversation reset."
 
     # ── Runtime config ────────────────────────────────────────────────────
 
@@ -1142,6 +1229,7 @@ async def _run_headless():
         loop.call_soon_threadsafe(agent.event_bus.put_nowait, event)
 
     mic = AudioCapture(on_speech)
+    agent.mic = mic
     mic_thread = threading.Thread(target=mic.run, daemon=True)
     mic_thread.start()
 

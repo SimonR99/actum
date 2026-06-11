@@ -255,6 +255,13 @@ class EnergyVAD:
         self._in_speech = False
         self._silence_count = 0
 
+    def reset(self):
+        """Drop any partial capture (e.g. after the mic was muted)."""
+        self._pre_roll = []
+        self._buffer = []
+        self._in_speech = False
+        self._silence_count = 0
+
     def process(self, chunk: np.ndarray) -> np.ndarray | None:
         """Feed one audio chunk. Returns complete utterance PCM when speech ends."""
         rms = float(np.sqrt(np.mean(chunk ** 2)))
@@ -327,6 +334,24 @@ class AudioCapture:
         self._chunk_frames = int(self._sample_rate * CHUNK_MS / 1000)
         self._vad = vad or EnergyVAD()
         self._stop = threading.Event()
+        self._muted = threading.Event()
+
+    def pause(self):
+        """Stop feeding audio to the VAD (e.g. while the robot speaks).
+
+        The stream keeps reading so it stays healthy, but chunks are discarded
+        and any partial utterance is dropped — otherwise the robot hears its
+        own TTS output and triggers itself in a feedback loop.
+        """
+        self._muted.set()
+
+    def resume(self):
+        self._vad.reset()
+        self._muted.clear()
+
+    @property
+    def muted(self) -> bool:
+        return self._muted.is_set()
 
     def run(self):
         """Blocking mic loop — call in a daemon thread."""
@@ -354,6 +379,8 @@ class AudioCapture:
             ) as stream:
                 while not self._stop.is_set():
                     chunk, _ = stream.read(chunk_frames)
+                    if self._muted.is_set():
+                        continue
                     utterance = self._vad.process(chunk.flatten())
                     if utterance is not None:
                         self._on_speech(pcm_to_wav_b64(utterance, sample_rate))

@@ -146,6 +146,11 @@ class OpenAIProvider(InferenceProvider):
             print(f"[openai] transcription failed: {exc}")
             return ""
 
+    def reset(self) -> None:
+        """Drop all turns, keeping only the system prompt."""
+        if self._messages:
+            self._messages = self._messages[:1]
+
     def _trim_history(self) -> None:
         if len(self._messages) <= _MAX_HISTORY + 1:
             return

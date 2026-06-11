@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Mic2,
   Network,
+  RotateCcw,
   Save,
   Send,
   Settings,
@@ -193,6 +194,7 @@ function useActumState() {
   };
 
   const pushMessage = (message) => setMessages((current) => [...current, { id: uid(), ...message }]);
+  const clearMessages = () => setMessages([]);
 
   const refresh = async () => {
     const payload = await api("/state");
@@ -287,6 +289,7 @@ function useActumState() {
     refresh,
     messages,
     pushMessage,
+    clearMessages,
     busy,
     setBusy
   };
@@ -305,6 +308,7 @@ export default function App() {
     refresh,
     messages,
     pushMessage,
+    clearMessages,
     busy,
     setBusy
   } = useActumState();
@@ -367,6 +371,7 @@ export default function App() {
             refresh={refresh}
             messages={messages}
             pushMessage={pushMessage}
+            clearMessages={clearMessages}
             busy={busy}
             setBusy={setBusy}
           />
@@ -469,7 +474,7 @@ function PanelHeader({ title, meta, icon: Icon, right, index }) {
 
 // ── Right rail: Chat + Settings ────────────────────────────────────────────────
 
-function RightRail({ view, setView, state, showToast, refresh, messages, pushMessage, busy, setBusy }) {
+function RightRail({ view, setView, state, showToast, refresh, messages, pushMessage, clearMessages, busy, setBusy }) {
   const { t } = useT();
   const tabs = [
     { id: "chat", label: t("panel.chat"), icon: MessageSquare },
@@ -505,6 +510,7 @@ function RightRail({ view, setView, state, showToast, refresh, messages, pushMes
           refresh={refresh}
           messages={messages}
           pushMessage={pushMessage}
+          clearMessages={clearMessages}
           busy={busy}
           setBusy={setBusy}
         />
@@ -515,7 +521,7 @@ function RightRail({ view, setView, state, showToast, refresh, messages, pushMes
   );
 }
 
-function ChatPanel({ state, showToast, refresh, messages, pushMessage, busy, setBusy }) {
+function ChatPanel({ state, showToast, refresh, messages, pushMessage, clearMessages, busy, setBusy }) {
   const { t } = useT();
   const [command, setCommand] = useState("");
   const [recording, setRecording] = useState(false);
@@ -586,6 +592,18 @@ function ChatPanel({ state, showToast, refresh, messages, pushMessage, busy, set
     await queueTrigger("vision");
   }
 
+  async function resetConversation() {
+    try {
+      await api("/conversation/reset", { method: "POST" });
+      clearMessages();
+      setBusy(false);
+      showToast(t("chat.resetDone"));
+      await refresh();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
@@ -612,6 +630,9 @@ function ChatPanel({ state, showToast, refresh, messages, pushMessage, busy, set
               }
             }}
           />
+          <button className="btn h-10 w-10 shrink-0 p-0" title={t("chat.reset")} onClick={resetConversation}>
+            <RotateCcw className="h-4 w-4" />
+          </button>
           <button
             className={cx("btn h-10 w-10 shrink-0 p-0", recording && "btn-recording")}
             title={recording ? t("chat.stop") : t("chat.voice")}
@@ -766,6 +787,7 @@ function statusTone(status) {
 function PerceptionPanel({ state, frame }) {
   const { t } = useT();
   const body = state?.body || {};
+  const scene = state?.scene || {};
   const memory = state?.memory || {};
   const recent = (memory.recent || []).filter((item) => ["observation", "spatial"].includes(item.kind)).slice(-4).reverse();
 
@@ -785,6 +807,15 @@ function PerceptionPanel({ state, frame }) {
             <span className={cx("h-1.5 w-1.5 rounded-full", frame ? "animate-live-ping bg-emerald-400" : "bg-slate-500")} />
             cam
           </span>
+        </div>
+        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <SectionTitle
+            title={t("perception.scene")}
+            meta={scene.updated_at ? new Date(scene.updated_at * 1000).toLocaleTimeString() : ""}
+          />
+          <div className={cx("mt-2 text-sm leading-relaxed", scene.summary ? "text-slate-800" : "text-slate-400")}>
+            {scene.summary || t("perception.noScene")}
+          </div>
         </div>
       </div>
 

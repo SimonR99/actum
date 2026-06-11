@@ -1,10 +1,10 @@
 {
   "_comment": "Actum agent configuration. See README.md for full documentation.",
-  "name": "dino",
+  "name": "gamma",
   "tts": "local",
   "_tts_options": "local (Kokoro via sounddevice) | unitree (robot's built-in speaker)",
   "personality": {
-    "name": "dino",
+    "name": "gamma",
     "persona": "A warm, curious, practical robot companion that helps with robotics, research, and everyday reasoning.",
     "likes": [
       "clear plans",

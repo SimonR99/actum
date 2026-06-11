@@ -49,6 +49,8 @@ class RobotRuntime:
         self.spatial_map = SpatialMap()
         self.body = BodyPerception()
         self.tool_graph: list[dict[str, Any]] = []
+        # Latest visual scene summary (what the robot last understood from camera).
+        self.scene: dict[str, Any] = {"summary": "", "source": "", "updated_at": 0.0}
 
     def connect(self) -> bool:
         ok = self.backend.connect()
@@ -156,6 +158,24 @@ class RobotRuntime:
         note = f"Profile set to {self.profiles.active_name}."
         return True, note
 
+    def set_scene(self, summary: str, source: str = "vision"):
+        """Record the latest visual understanding for the operator dashboard."""
+        clean = str(summary).strip()
+        if not clean:
+            return
+        self.scene = {"summary": clean, "source": str(source), "updated_at": now()}
+        self.events.append("scene.summary", "agent", summary=clean)
+
+    def reset_session(self, reason: str = "Conversation reset by operator."):
+        """Clear the live task state for a fresh conversation.
+
+        Durable memory, the event log, and the tool graph are kept — only the
+        current intent and behavior tree go back to a waiting state.
+        """
+        self.intent = IntentState()
+        self.behavior.set_waiting(reason)
+        self.events.append("conversation.reset", "operator", message=reason)
+
     def maybe_consolidate_memory(self) -> dict[str, Any] | None:
         """Run periodic memory self-maintenance if the interval has elapsed."""
         interval = self.memory.consolidate_seconds
@@ -243,6 +263,7 @@ class RobotRuntime:
             "cron": self.cron.to_dict(),
             "map": self.spatial_map.to_dict(),
             "body": self.body.to_dict(),
+            "scene": dict(self.scene),
             "profile": self.profiles.to_dict(),
             "settings": self.settings.to_dict(),
             "events": self.events.tail(200),

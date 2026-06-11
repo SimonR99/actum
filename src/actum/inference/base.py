@@ -41,6 +41,10 @@ class InferenceProvider(ABC):
         tool call such as ``done()``.
         """
 
+    def reset(self) -> None:
+        """Forget the conversation history, keeping the system prompt and tools."""
+        return None
+
     def close(self) -> None:  # pragma: no cover - trivial default
         return None
 
