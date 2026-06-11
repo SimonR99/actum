@@ -53,7 +53,7 @@
     "idle_importance": 0.2,
     "force_idle_reviews": false
   },
-  "active_profile": "balanced",
+  "active_profile": "fast",
   "_active_profile_options": "fast | balanced | power_saver",
   "_profiles_comment": "A profile is one switch for speed/cost/power: it selects the inference provider, the local compute backend, loop tick rate, idle review cadence, dashboard camera fps, and how often the robot sets its own tasks. The active profile overrides the matching values above and in models.active_provider.",
   "profiles": {
@@ -84,15 +84,15 @@
   },
   "cron": [],
   "models": {
-    "active_provider": "local",
+    "active_provider": "openai",
     "_active_provider_comment": "Overridden by the active profile's provider. Compute backend (gpu/cpu/npu) comes from the profile too.",
     "providers": {
       "local": {
-        "enabled": true,
+        "enabled": false,
         "model": "litert-community/gemma-4-E2B-it-litert-lm"
       },
       "openai": {
-        "enabled": false,
+        "enabled": true,
         "model": "gpt-5.4-nano-2026-03-17",
         "api_key_env": "OPENAI_API_KEY"
       },

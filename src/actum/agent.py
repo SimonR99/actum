@@ -882,7 +882,7 @@ def _default_config() -> dict:
             "idle_importance": 0.2,
             "force_idle_reviews": False,
         },
-        "active_profile": "balanced",
+        "active_profile": "fast",
         "profiles": {
             "fast": {
                 "provider": "openai",
@@ -911,14 +911,14 @@ def _default_config() -> dict:
         },
         "cron": [],
         "models": {
-            "active_provider": "local",
+            "active_provider": "openai",
             "providers": {
                 "local": {
-                    "enabled": True,
+                    "enabled": False,
                     "model": HF_REPO,
                 },
                 "openai": {
-                    "enabled": False,
+                    "enabled": True,
                     "model": "gpt-5.4-nano-2026-03-17",
                     "api_key_env": "OPENAI_API_KEY",
                 },

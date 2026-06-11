@@ -31,7 +31,7 @@ def test_robot_backend_config_selects_unitree(tmp_path):
 def test_default_config_has_speed_profiles(tmp_path):
     cfg = _load_config(tmp_path / "missing.json")
 
-    assert cfg["active_profile"] == "balanced"
+    assert cfg["active_profile"] == "fast"
     assert set(cfg["profiles"]) >= {"fast", "balanced", "power_saver"}
     assert cfg["profiles"]["power_saver"]["compute"] == "cpu"
 

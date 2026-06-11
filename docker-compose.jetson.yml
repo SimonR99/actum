@@ -43,7 +43,7 @@ services:
       - ACTUM_CAMERA=csi
     
     volumes:
-      - ./config.json:/workspace/config.json:ro
+      - ./config.json:/workspace/config.json
       - actum-huggingface:/root/.cache/huggingface
       - ./logs:/workspace/logs
       

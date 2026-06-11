@@ -33,7 +33,7 @@ docker run --rm -it \
     --gpus all \
     --name actum-headless \
     "${ENV_ARGS[@]}" \
-    -v "$PROJECT_ROOT/config.json:/workspace/config.json:ro" \
+    -v "$PROJECT_ROOT/config.json:/workspace/config.json" \
     -v actum-huggingface:/root/.cache/huggingface \
     -v "$PROJECT_ROOT/logs:/workspace/logs" \
     "${DEVICE_ARGS[@]}" \

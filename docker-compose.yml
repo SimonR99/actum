@@ -34,14 +34,20 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       # Audio device (adjust if needed: hw:1,0 for different card)
-      - ACTUM_AUDIO_DEVICE=hw:0,0
+      - ACTUM_AUDIO_DEVICE=hw:2,0
       # Camera mode: auto, csi, usb, or device index
       - ACTUM_CAMERA=usb
     
+    # Grant device cgroup permissions for speaker/camera
+    devices:
+      - "/dev/snd:/dev/snd"
+      - "/dev/video0:/dev/video0"
+      - "/dev/video1:/dev/video1"
+
     # Volumes for persistence + hardware access
     volumes:
       # Config file (host config.json → container)
-      - ./config.json:/workspace/config.json:ro
+      - ./config.json:/workspace/config.json
       
       # Model cache (persistent across runs)
       - actum-huggingface:/root/.cache/huggingface
@@ -52,8 +58,8 @@ services:
       # Hardware access (if robot is on same host)
       # Uncomment to enable hardware bridge
       # - /dev/ttyUSB0:/dev/ttyUSB0  # Serial ports (adjust as needed)
-      # - /dev/snd:/dev/snd            # Audio devices
-      # - /dev/video0:/dev/video0      # Camera device (USB or CSI)
+      - /dev/snd:/dev/snd            # Audio devices
+      - /dev/video0:/dev/video0      # Camera device (USB or CSI)
     
     # Ports: in network_mode: host, ports mapping is not needed as the container
     # shares the host network namespace.
