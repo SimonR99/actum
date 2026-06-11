@@ -78,7 +78,8 @@ or a useful low-disruption action.
 - When uncertain, call report_status() or ask before acting.
 
 Be concise when speaking (1-2 sentences). Prefer useful action over explanation. \
-Do not expose private chain-of-thought; expose intent, plans, and status summaries."""
+Do not expose private chain-of-thought; expose intent, plans, and status summaries.
+{language_block}"""
 
 
 # ── Agent ──────────────────────────────────────────────────────────────────────
@@ -363,8 +364,10 @@ class RobotAgent:
 
         print(f"[tts] generating: {text!r}")
         try:
+            language = self.config.get("language", "en")
+            voice = "ff_siwis" if language == "fr" else "af_heart"
             pcm = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.tts_backend.generate(text)
+                None, lambda: self.tts_backend.generate(text, voice=voice)
             )
             print(f"[tts] playing {len(pcm) / self.tts_backend.sample_rate:.2f}s of audio")
             await self._play_audio(pcm)
@@ -386,7 +389,10 @@ class RobotAgent:
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                 path = f.name
             sf.write(path, pcm, sr)
-            cmd = f"aplay '{path}' || afplay '{path}'"
+            if device:
+                cmd = f"aplay -D {device} '{path}'"
+            else:
+                cmd = f"aplay '{path}' || afplay '{path}'"
             ret = await asyncio.get_event_loop().run_in_executor(None, lambda: os.system(cmd))
             if ret != 0:
                 print(f"[tts] fallback playback also failed (exit {ret})")
@@ -614,6 +620,32 @@ class RobotAgent:
                 return False, f"Speech setting changed in memory but failed to save config: {exc}"
         return True, f"Speech-to-text engine set to {engine}."
 
+    def set_language(self, language: str, persist: bool = True) -> tuple[bool, str]:
+        language = str(language).lower().strip()
+        if language not in {"en", "fr"}:
+            return False, "Invalid language. Use 'en' or 'fr'."
+
+        self.config["language"] = language
+        self.runtime.settings.language = language
+
+        # Re-build/re-initialize speech settings (STT)
+        self.stt = build_stt(self.runtime.settings)
+
+        if self.provider:
+            try:
+                system_prompt = _build_system_prompt(self.config, self.runtime)
+                self.provider.start(system_prompt, self.tools.get_tools())
+            except Exception as exc:
+                return False, f"Language set but failed to reload model provider: {exc}"
+
+        if persist:
+            try:
+                _persist_config_updates(self._config_path, {"language": language})
+            except Exception as exc:
+                return False, f"Language changed in memory but failed to save config: {exc}"
+
+        return True, f"Language set to {language}."
+
     def set_tool_enabled(self, tool: str, enabled: bool, persist: bool = False) -> tuple[bool, str]:
         try:
             self.runtime.settings.set_tool_enabled(tool, enabled)
@@ -725,10 +757,17 @@ def _resolve_model_path() -> str:
 
 
 def _build_system_prompt(config: dict, runtime: RobotRuntime) -> str:
+    language = config.get("language", "en")
+    if language == "fr":
+        language_block = "\nIMPORTANT: Always understand and respond to the user in French. Write your speech, plan, status updates, and done summaries in French."
+    else:
+        language_block = "\nIMPORTANT: Always understand and respond to the user in English. Write your speech, plan, status updates, and done summaries in English."
+
     return SYSTEM_PROMPT_TEMPLATE.format(
         robot_name=runtime.robot_name,
         personality_block=_format_personality_block(config),
         backend_block=_format_backend_block(runtime),
+        language_block=language_block,
     )
 
 
@@ -849,6 +888,7 @@ def _default_config() -> dict:
     return {
         "name": "dino",
         "tts": "local",
+        "language": "en",
         "personality": {
             "name": "dino",
             "persona": "A warm, curious, practical robot companion that likes helping with robotics and everyday reasoning.",

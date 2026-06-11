@@ -87,3 +87,36 @@ def test_robot_settings_update_name_backend_and_persist(tmp_path):
     assert saved["name"] == "dino"
     assert saved["personality"]["name"] == "dino"
     assert saved["robot"]["backend"] == "fake"
+
+
+def test_language_setting_updates_prompt_and_persists(tmp_path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "language": "en",
+                "memory": {"path": str(tmp_path / "memory.json")},
+            }
+        ),
+        encoding="utf-8",
+    )
+    agent = RobotAgent(config_path)
+
+    # Initially English
+    assert agent.config.get("language") == "en"
+    assert agent.runtime.settings.language == "en"
+
+    # Set to French
+    ok, message = agent.set_language("fr", persist=True)
+    assert ok is True
+    assert agent.config.get("language") == "fr"
+    assert agent.runtime.settings.language == "fr"
+
+    # Verify persistence
+    saved = json.loads(config_path.read_text(encoding="utf-8"))
+    assert saved["language"] == "fr"
+
+    # Verify invalid language fails
+    ok, message = agent.set_language("de", persist=False)
+    assert ok is False
+

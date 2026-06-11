@@ -33,6 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     portaudio19-dev \
     libportaudio2 \
     alsa-utils \
+    libasound2-plugins \
     # OpenCV dependencies (headless mode with codec support)
     libopencv-dev \
     python3-opencv \

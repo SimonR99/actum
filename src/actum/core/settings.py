@@ -48,6 +48,7 @@ class RuntimeSettings:
         self.speech = {**DEFAULT_SPEECH, **raw_speech}
         if str(self.speech.get("stt_engine")) not in STT_ENGINES:
             self.speech["stt_engine"] = DEFAULT_SPEECH["stt_engine"]
+        self.language = str(config.get("language", "en")).strip().lower()
 
     def set_model_provider(
         self,
@@ -101,6 +102,7 @@ class RuntimeSettings:
             env_name = cfg.get("api_key_env")
             cfg["api_key_configured"] = bool(cfg.get("api_key_configured") or (env_name and os.environ.get(str(env_name))))
         return {
+            "language": self.language,
             "models": models,
             "tools": {
                 "enabled": sorted(self.enabled_tools),

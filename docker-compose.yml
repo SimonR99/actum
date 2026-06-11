@@ -34,9 +34,11 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       # Audio device (adjust if needed: hw:1,0 for different card)
-      - ACTUM_AUDIO_DEVICE=hw:2,0
+      - ACTUM_AUDIO_DEVICE=plughw:2,0
       # Camera mode: auto, csi, usb, or device index
       - ACTUM_CAMERA=usb
+      # Route container audio to the host PulseAudio/PipeWire sound server
+      - PULSE_SERVER=unix:/tmp/pulse-socket
     
     # Grant device cgroup permissions for speaker/camera
     devices:
@@ -54,6 +56,9 @@ services:
       
       # Agent memory + logs
       - ./logs:/workspace/logs
+      
+      # PulseAudio socket mount
+      - /run/user/1000/pulse/native:/tmp/pulse-socket
       
       # Hardware access (if robot is on same host)
       # Uncomment to enable hardware bridge

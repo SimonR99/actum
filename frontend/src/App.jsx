@@ -19,7 +19,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { LANGUAGES, useT } from "./i18n.js";
+import { LANGUAGES, useT, STRINGS } from "./i18n.js";
 
 const DEFAULT_ROBOT = {
   backend: "laptop",
@@ -167,8 +167,14 @@ function arrayBufferToBase64(buffer) {
 }
 
 function useActumState() {
-  const { t } = useT();
+  const { t, lang, setLang } = useT();
   const [state, setState] = useState(null);
+
+  const langRef = useRef(lang);
+  useEffect(() => {
+    langRef.current = lang;
+  }, [lang]);
+
   const [frame, setFrame] = useState("");
   const [wsLive, setWsLive] = useState(false);
   const [cameraLive, setCameraLive] = useState(false);
@@ -191,6 +197,10 @@ function useActumState() {
   const refresh = async () => {
     const payload = await api("/state");
     setState(payload);
+    const backendLang = payload?.settings?.language || payload?.language || "en";
+    if (backendLang && backendLang !== langRef.current) {
+      setLang(backendLang);
+    }
   };
 
   useEffect(() => {
@@ -213,7 +223,13 @@ function useActumState() {
       };
       socket.onmessage = (event) => {
         const msg = JSON.parse(event.data);
-        if (msg.type === "state") setState(msg.data);
+        if (msg.type === "state") {
+          setState(msg.data);
+          const backendLang = msg.data?.settings?.language || msg.data?.language || "en";
+          if (backendLang && backendLang !== langRef.current) {
+            setLang(backendLang);
+          }
+        }
         if (msg.type === "frame") {
           const frameId = Number(msg.frame_id || 0);
           const sentAt = Number(msg.sent_at || 0);
@@ -274,7 +290,7 @@ function useActumState() {
 }
 
 export default function App() {
-  const { t } = useT();
+  const { t, lang, setLang } = useT();
   const {
     state,
     frame,
@@ -299,6 +315,23 @@ export default function App() {
   const serverStatus = state?.server?.status || "starting";
   const serverReady = Boolean(state?.server?.ready);
 
+  async function handleLanguageChange(nextLang) {
+    try {
+      console.log("DEBUG handleLanguageChange nextLang:", nextLang, "strings:", STRINGS[nextLang]);
+      setLang(nextLang);
+      const payload = await api("/settings/language", {
+        method: "POST",
+        body: JSON.stringify({ language: nextLang, persist: true })
+      });
+      const toastMsg = STRINGS[nextLang]?.["toast.languageUpdated"] || t("toast.languageUpdated");
+      console.log("DEBUG handleLanguageChange toastMsg:", toastMsg);
+      showToast(toastMsg);
+      await refresh();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
   return (
     <div className="min-h-screen text-slate-900">
       <Header
@@ -310,6 +343,8 @@ export default function App() {
         activeProvider={activeProvider}
         serverStatus={serverStatus}
         serverReady={serverReady}
+        currentLang={lang}
+        onLanguageChange={handleLanguageChange}
       />
 
       <main className="grid h-[calc(100vh-72px)] min-h-[760px] grid-cols-[330px_minmax(520px,1fr)_450px] grid-rows-[minmax(420px,1fr)_300px] gap-5 p-5 max-[1280px]:h-auto max-[1280px]:grid-cols-2 max-[1280px]:grid-rows-none max-[860px]:grid-cols-1">
@@ -362,7 +397,7 @@ export default function App() {
   );
 }
 
-function Header({ robotName, wsLive, cameraLive, backend, connected, activeProvider, serverStatus, serverReady }) {
+function Header({ robotName, wsLive, cameraLive, backend, connected, activeProvider, serverStatus, serverReady, currentLang, onLanguageChange }) {
   const { t } = useT();
   return (
     <header className="grid min-h-[72px] grid-cols-[1fr_auto] items-center gap-4 border-b border-slate-200 bg-white/80 px-5 backdrop-blur-md max-[860px]:grid-cols-1 max-[860px]:py-3">
@@ -385,14 +420,13 @@ function Header({ robotName, wsLive, cameraLive, backend, connected, activeProvi
         <StatusChip ok={cameraLive} label={cameraLive ? t("status.camera.live") : t("status.camera.waiting")} />
         <StatusChip ok={connected} label={`${t("status.backend")} ${backend}`} />
         <span className="chip">{t("status.model")} {activeProvider}</span>
-        <LanguageToggle />
+        <LanguageToggle currentLang={currentLang} onLanguageChange={onLanguageChange} />
       </div>
     </header>
   );
 }
 
-function LanguageToggle() {
-  const { lang, setLang } = useT();
+function LanguageToggle({ currentLang, onLanguageChange }) {
   return (
     <div className="inline-flex overflow-hidden rounded-full border border-slate-200 bg-white p-0.5">
       {LANGUAGES.map((option) => (
@@ -400,9 +434,9 @@ function LanguageToggle() {
           key={option.id}
           className={cx(
             "h-6 rounded-full px-3 font-mono text-[11px] font-semibold uppercase tracking-tight transition",
-            lang === option.id ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-900"
+            currentLang === option.id ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-900"
           )}
-          onClick={() => setLang(option.id)}
+          onClick={() => onLanguageChange(option.id)}
         >
           {option.label}
         </button>

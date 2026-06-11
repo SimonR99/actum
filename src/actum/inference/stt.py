@@ -157,9 +157,10 @@ class OpenAISTT(STTEngine):
 
     name = "openai"
 
-    def __init__(self, model: str = DEFAULT_OPENAI_TRANSCRIBE_MODEL, api_key: str = ""):
+    def __init__(self, model: str = DEFAULT_OPENAI_TRANSCRIBE_MODEL, api_key: str = "", language: str = ""):
         self._model = model or DEFAULT_OPENAI_TRANSCRIBE_MODEL
         self._api_key = api_key
+        self._language = (language or "").strip() or None
         self._client: Any = None
 
     def _ensure_client(self) -> Any:
@@ -174,7 +175,10 @@ class OpenAISTT(STTEngine):
             client = self._ensure_client()
             buffer = io.BytesIO(base64.b64decode(audio_b64))
             buffer.name = "audio.wav"
-            result = client.audio.transcriptions.create(model=self._model, file=buffer)
+            kwargs = {}
+            if self._language:
+                kwargs["language"] = self._language
+            result = client.audio.transcriptions.create(model=self._model, file=buffer, **kwargs)
             return (getattr(result, "text", "") or "").strip()
         except Exception as exc:
             print(f"[stt] openai transcription failed: {exc}")
@@ -185,6 +189,7 @@ def build_stt(settings: Any) -> STTEngine | None:
     """Construct the selected STT engine, or None for multimodal passthrough."""
     speech = getattr(settings, "speech", {}) or {}
     engine = str(speech.get("stt_engine", DEFAULT_ENGINE)).lower().strip()
+    lang = getattr(settings, "language", "") or ""
 
     if engine in {"model", "none", ""}:
         return None
@@ -193,7 +198,7 @@ def build_stt(settings: Any) -> STTEngine | None:
             model_size=str(speech.get("whisper_model", DEFAULT_WHISPER_MODEL)),
             compute_type=str(speech.get("whisper_compute", "auto")),
             device=str(speech.get("whisper_device", "auto")),
-            language=str(speech.get("whisper_language", "")),
+            language=lang or str(speech.get("whisper_language", "")),
         )
     if engine == "openai":
         models = settings.to_config(include_secrets=True)["models"]
@@ -201,5 +206,6 @@ def build_stt(settings: Any) -> STTEngine | None:
         return OpenAISTT(
             model=str(speech.get("openai_transcribe_model", DEFAULT_OPENAI_TRANSCRIBE_MODEL)),
             api_key=api_key,
+            language=lang,
         )
     return None

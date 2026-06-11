@@ -8,7 +8,7 @@ export const LANGUAGES = [
 const DEFAULT_LANG = "fr";
 const STORAGE_KEY = "actum_lang";
 
-const STRINGS = {
+export const STRINGS = {
   fr: {
     "app.subtitle": "Console d'autonomie permanente",
     // header status
@@ -149,6 +149,7 @@ const STRINGS = {
     "toast.toolUpdated": "Outil mis à jour",
     "toast.profileUpdated": "Profil mis à jour",
     "toast.speechUpdated": "Reconnaissance vocale mise à jour",
+    "toast.languageUpdated": "Langue de l'agent mise à jour",
     "toast.scheduled": "Planifié",
     "toast.passiveIgnored": "Événement passif ignoré"
   },
@@ -276,6 +277,7 @@ const STRINGS = {
     "toast.toolUpdated": "Tool updated",
     "toast.profileUpdated": "Profile updated",
     "toast.speechUpdated": "Speech recognition updated",
+    "toast.languageUpdated": "Agent language updated",
     "toast.scheduled": "Scheduled",
     "toast.passiveIgnored": "Passive event ignored"
   }

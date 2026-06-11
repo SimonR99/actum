@@ -216,6 +216,7 @@ def attach_server(agent: RobotAgent, app: FastAPI):
         return {
             "name": agent.get_name(),
             "mode": agent.get_mode(),
+            "language": agent.config.get("language", "en"),
             "server": _server_status(app),
             "backend": agent.runtime.backend.name,
             "robot_config": agent.config.get("robot", {}),
@@ -321,6 +322,21 @@ def attach_server(agent: RobotAgent, app: FastAPI):
         return JSONResponse(
             {"ok": ok, "message": message, "settings": agent.runtime.settings.to_dict()},
             status_code=200 if ok else 400,
+        )
+
+    @app.post("/settings/language")
+    async def settings_language(body: dict):
+        language = (body.get("language") or "").strip().lower()
+        persist = bool(body.get("persist", True))
+        ok, message = agent.set_language(language, persist=persist)
+        status = 200 if ok else 400
+        return JSONResponse(
+            {
+                "ok": ok,
+                "language": agent.config.get("language", "en"),
+                "message": message,
+            },
+            status_code=status,
         )
 
     @app.post("/settings/tool")

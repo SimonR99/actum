@@ -53,6 +53,71 @@ def _env(name: str, default: str | None = None) -> str | None:
     return value if value is not None else default
 
 
+def _configure_alsa_default():
+    """Configures ALSA default PCM to route through the plug plugin or PulseAudio.
+    
+    This enables automatic sample rate conversion and/or host-desktop sound sharing,
+    preventing PortAudio / sounddevice / aplay errors when playing/capturing audio.
+    """
+    import re
+    if os.name != "posix" or os.environ.get("ACTUM_AUDIO_DEVICE_CONFIGURED"):
+        return
+    
+    # Check if we are using containerized PulseAudio
+    pulse_socket = os.environ.get("PULSE_SERVER", "")
+    if pulse_socket.startswith("unix:"):
+        socket_path = pulse_socket[5:]
+        if os.path.exists(socket_path):
+            asound_content = (
+                "pcm.!default {\n"
+                "    type pulse\n"
+                "}\n"
+                "ctl.!default {\n"
+                "    type pulse\n"
+                "}\n"
+            )
+            try:
+                with open("/etc/asound.conf", "w") as f:
+                    f.write(asound_content)
+                print(f"[audio] Configured ALSA default PCM -> PulseAudio routing via {pulse_socket}")
+                os.environ["ACTUM_AUDIO_DEVICE_CONFIGURED"] = "1"
+                os.environ["ACTUM_AUDIO_DEVICE"] = "default"
+                return
+            except Exception as e:
+                print(f"[audio] Failed to write PulseAudio /etc/asound.conf: {e}")
+
+    # Fallback to direct hardware ALSA configuration
+    audio_device = os.environ.get("ACTUM_AUDIO_DEVICE", "")
+    if not audio_device:
+        return
+        
+    match = re.match(r"^(?:plug)?hw:(\d+)(?:,(\d+))?$", audio_device)
+    if match:
+        card = match.group(1)
+        device = match.group(2) or "0"
+        asound_content = (
+            f"pcm.!default {{\n"
+            f"    type plug\n"
+            f"    slave.pcm \"hw:{card},{device}\"\n"
+            f"}}\n"
+            f"ctl.!default {{\n"
+            f"    type hw\n"
+            f"    card {card}\n"
+            f"}}\n"
+        )
+        try:
+            with open("/etc/asound.conf", "w") as f:
+                f.write(asound_content)
+            print(f"[audio] Configured ALSA default PCM -> hw:{card},{device} with plug rate converter")
+            os.environ["ACTUM_AUDIO_DEVICE_CONFIGURED"] = "1"
+            os.environ["ACTUM_AUDIO_DEVICE"] = "default"
+        except Exception as e:
+            print(f"[audio] Failed to write /etc/asound.conf: {e}")
+
+
+_configure_alsa_default()
+
+
 # ── Camera ─────────────────────────────────────────────────────────────────────
 
 def open_camera(source: str | int | None = None):
