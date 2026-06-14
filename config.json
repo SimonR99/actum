@@ -146,5 +146,5 @@
     "_comment": "Enable only trusted MCP servers. Install with: pip install -e .[mcp]",
     "servers": {}
   },
-  "language": "fr"
+  "language": "en"
 }

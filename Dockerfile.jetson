@@ -72,12 +72,15 @@ COPY src ./src
 # unless a CUDA build of ctranslate2 is installed.
 RUN pip install -e ".[camera,openai,whisper,mcp,unitree]"
 
+# Ensure the cache directory exists even if no models are pre-downloaded
+RUN mkdir -p /root/.cache/huggingface
+
 # Pre-download models (optional, helps on first run)
 # Comment out if you want a smaller image
-RUN python3 -c "from huggingface_hub import snapshot_download; \
-    snapshot_download('litert-community/gemma-4-E2B-it-litert-lm', \
-    allow_patterns='gemma-4-E2B-it.litertlm', \
-    cache_dir='/root/.cache/huggingface')" || true
+# RUN python3 -c "from huggingface_hub import snapshot_download; \
+#     snapshot_download('litert-community/gemma-4-E2B-it-litert-lm', \
+#     allow_patterns='gemma-4-E2B-it.litertlm', \
+#     cache_dir='/root/.cache/huggingface')" || true
 
 # ── Runtime Stage ──────────────────────────────────────────────────────────
 FROM base as runtime

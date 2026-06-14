@@ -37,7 +37,6 @@ from actum.runtime import RobotRuntime
 from actum.tools import RobotTools
 from actum.perception import AudioCapture, open_camera, capture_jpeg
 
-
 # ── Model config ───────────────────────────────────────────────────────────────
 
 HF_REPO = "litert-community/gemma-4-E2B-it-litert-lm"
@@ -88,11 +87,16 @@ Do not expose private chain-of-thought; expose intent, plans, and status summari
 
 # ── Agent ──────────────────────────────────────────────────────────────────────
 
+
 class RobotAgent:
     """On-device robot agent: multimodal perception + agentic multi-step tool calling."""
 
     def __init__(self, config_path: str | Path | None = None):
-        self._config_path = Path(config_path) if config_path else Path(__file__).resolve().parents[2] / "config.json"
+        self._config_path = (
+            Path(config_path)
+            if config_path
+            else Path(__file__).resolve().parents[2] / "config.json"
+        )
         _load_dotenv(self._config_path.parent)
         self.config = _load_config(self._config_path)
         self.provider: InferenceProvider | None = None
@@ -164,7 +168,9 @@ class RobotAgent:
             resolve_model_path=_resolve_model_path,
         )
         print(f"Starting inference provider: {self.provider.name}…")
-        self.provider.start(_build_system_prompt(self.config, self.runtime), self.tools.get_tools())
+        self.provider.start(
+            _build_system_prompt(self.config, self.runtime), self.tools.get_tools()
+        )
 
     def _pop_pending_frame(self) -> str | None:
         """Hand the most recent look() frame to the provider, then clear it."""
@@ -190,10 +196,14 @@ class RobotAgent:
 
     # ── Perception ─────────────────────────────────────────────────────────
 
-    def capture_frame(self, width: int = 320, quality: int = 70, drain_frames: int | None = None) -> str | None:
+    def capture_frame(
+        self, width: int = 320, quality: int = 70, drain_frames: int | None = None
+    ) -> str | None:
         """Return a base64 JPEG from the camera, or None."""
         with self._camera_lock:
-            return capture_jpeg(self._camera, width=width, quality=quality, drain_frames=drain_frames)
+            return capture_jpeg(
+                self._camera, width=width, quality=quality, drain_frames=drain_frames
+            )
 
     # ── Core agentic loop ──────────────────────────────────────────────────
 
@@ -253,13 +263,21 @@ class RobotAgent:
         error = ""
         final_text = ""
         try:
-            final_text = await asyncio.get_running_loop().run_in_executor(
-                None,
-                lambda: self.provider.send(content),
-            ) or ""
+            final_text = (
+                await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    lambda: self.provider.send(content),
+                )
+                or ""
+            )
         except Exception as exc:
             error = str(exc)
-            self.runtime.events.append("turn.error", "agent", message=error, event_source=event.get("source", "?"))
+            self.runtime.events.append(
+                "turn.error",
+                "agent",
+                message=error,
+                event_source=event.get("source", "?"),
+            )
             print(f"[agent] turn failed: {error}")
 
         elapsed = time.time() - t0
@@ -275,14 +293,23 @@ class RobotAgent:
         # A final plain-text reply (no tool call) is still an answer for the
         # operator — keep it instead of dropping it on the floor.
         if final_text.strip():
-            actions.append({"type": "reply", "text": final_text.strip(), "time": time.time()})
+            actions.append(
+                {"type": "reply", "text": final_text.strip(), "time": time.time()}
+            )
             self.runtime.events.append("agent.reply", "agent", text=final_text.strip())
         # Vision turns leave a visible "what I last saw" summary for the operator.
         if str(event.get("source", "")) == "vision":
-            scene = next(
-                (a.get("summary") for a in actions if a.get("type") == "done" and a.get("summary")),
-                "",
-            ) or final_text.strip()
+            scene = (
+                next(
+                    (
+                        a.get("summary")
+                        for a in actions
+                        if a.get("type") == "done" and a.get("summary")
+                    ),
+                    "",
+                )
+                or final_text.strip()
+            )
             self.runtime.set_scene(scene, source="vision")
         self._action_log.extend(actions)
         self._record_turn_memory(event, actions)
@@ -298,8 +325,22 @@ class RobotAgent:
 
     def _record_turn_memory(self, event: dict, actions: list[dict]):
         source = str(event.get("source", "unknown"))
-        done_summary = next((a.get("summary") for a in actions if a.get("type") == "done" and a.get("summary")), "")
-        reply = next((a.get("text") for a in actions if a.get("type") == "reply" and a.get("text")), "")
+        done_summary = next(
+            (
+                a.get("summary")
+                for a in actions
+                if a.get("type") == "done" and a.get("summary")
+            ),
+            "",
+        )
+        reply = next(
+            (
+                a.get("text")
+                for a in actions
+                if a.get("type") == "reply" and a.get("text")
+            ),
+            "",
+        )
         if done_summary:
             summary = str(done_summary)
         elif reply:
@@ -321,7 +362,9 @@ class RobotAgent:
         if event.get("audio"):
             # Transcribe through the selected STT engine; if it yields nothing
             # (engine is "model", disabled, or failed), pass raw audio to the model.
-            transcript = self.stt.transcribe(event["audio"]) if self.stt is not None else ""
+            transcript = (
+                self.stt.transcribe(event["audio"]) if self.stt is not None else ""
+            )
             if transcript:
                 content.append({"type": "text", "text": f"(voice) {transcript}"})
             else:
@@ -430,13 +473,22 @@ class RobotAgent:
     async def _speak_unmuted(self, text: str):
         mode = self.get_mode()
         if mode == "unitree":
-            if self.runtime.backend.name == "unitree_g1" and self.runtime.backend.connected:
-                result = await asyncio.get_running_loop().run_in_executor(None, lambda: self.runtime.backend.speak(text))
+            if (
+                self.runtime.backend.name == "unitree_g1"
+                and self.runtime.backend.connected
+            ):
+                result = await asyncio.get_running_loop().run_in_executor(
+                    None, lambda: self.runtime.backend.speak(text)
+                )
                 if result.ok:
                     return
-                print(f"[tts] unitree speak failed; falling back to local ({result.message})")
+                print(
+                    f"[tts] unitree speak failed; falling back to local ({result.message})"
+                )
             else:
-                print("[tts] unitree mode selected but Unitree backend is not connected; falling back to local")
+                print(
+                    "[tts] unitree mode selected but Unitree backend is not connected; falling back to local"
+                )
 
         if not self.tts_backend:
             print("[tts] no backend loaded — skipping speech")
@@ -449,7 +501,9 @@ class RobotAgent:
             pcm = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: self.tts_backend.generate(text, voice=voice)
             )
-            print(f"[tts] playing {len(pcm) / self.tts_backend.sample_rate:.2f}s of audio")
+            print(
+                f"[tts] playing {len(pcm) / self.tts_backend.sample_rate:.2f}s of audio"
+            )
             await self._play_audio(pcm)
         except Exception as e:
             print(f"[tts] error: {e}")
@@ -458,14 +512,18 @@ class RobotAgent:
         sr = self.tts_backend.sample_rate
         try:
             import sounddevice as sd
+
             device = os.environ.get("ACTUM_AUDIO_DEVICE") or None
             await asyncio.get_running_loop().run_in_executor(
                 None, lambda: sd.play(pcm, samplerate=sr, device=device, blocking=True)
             )
         except Exception as e:
-            print(f"[tts] sounddevice playback failed ({e}), trying aplay/afplay fallback")
+            print(
+                f"[tts] sounddevice playback failed ({e}), trying aplay/afplay fallback"
+            )
             import soundfile as sf
             import tempfile
+
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                 path = f.name
             sf.write(path, pcm, sr)
@@ -473,7 +531,9 @@ class RobotAgent:
                 cmd = f"aplay -D {device} '{path}'"
             else:
                 cmd = f"aplay '{path}' || afplay '{path}'"
-            ret = await asyncio.get_running_loop().run_in_executor(None, lambda: os.system(cmd))
+            ret = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: os.system(cmd)
+            )
             if ret != 0:
                 print(f"[tts] fallback playback also failed (exit {ret})")
 
@@ -557,7 +617,9 @@ class RobotAgent:
                 else:
                     self._continuation_attempts += 1
                     behavior.tick("continue task", intent.goal, "continue")
-                    await self.event_bus.put({"source": "continue", "text": intent.goal, "force": True})
+                    await self.event_bus.put(
+                        {"source": "continue", "text": intent.goal, "force": True}
+                    )
                     queued = True
         elif idle:
             self._continued_goal = ""
@@ -575,7 +637,11 @@ class RobotAgent:
             and (time.time() - self._last_deliberate_at) >= deliberate_seconds
         ):
             self._last_deliberate_at = time.time()
-            behavior.tick("deliberate", "Reviewing goals and memory for useful next steps.", "deliberate")
+            behavior.tick(
+                "deliberate",
+                "Reviewing goals and memory for useful next steps.",
+                "deliberate",
+            )
             await self.event_bus.put(
                 {
                     "source": "deliberate",
@@ -590,12 +656,15 @@ class RobotAgent:
             and behavior.idle_review
             and not queued
             and self.event_bus.empty()
-            and (time.time() - behavior.last_idle_review_at) >= behavior.idle_review_seconds
+            and (time.time() - behavior.last_idle_review_at)
+            >= behavior.idle_review_seconds
         ):
             frame = self.capture_frame()
             if frame:
                 behavior.last_idle_review_at = time.time()
-                behavior.tick("perception", "Reviewing the current camera frame.", "vision")
+                behavior.tick(
+                    "perception", "Reviewing the current camera frame.", "vision"
+                )
                 await self.event_bus.put(
                     {
                         "source": "vision",
@@ -610,11 +679,17 @@ class RobotAgent:
                 )
                 queued = True
             else:
-                behavior.set_waiting("No camera frame; waiting for chat, language, vision, or schedule trigger.")
+                behavior.set_waiting(
+                    "No camera frame; waiting for chat, language, vision, or schedule trigger."
+                )
 
         if idle and not queued:
-            behavior.set_waiting("Waiting for chat, language, vision, or schedule trigger.")
-        self._broadcast({"source": "loop", "actions": [], "elapsed": 0.0, "state_only": True})
+            behavior.set_waiting(
+                "Waiting for chat, language, vision, or schedule trigger."
+            )
+        self._broadcast(
+            {"source": "loop", "actions": [], "elapsed": 0.0, "state_only": True}
+        )
 
     def stop_background_loop(self):
         self._background_stop_requested = True
@@ -636,7 +711,9 @@ class RobotAgent:
         self.runtime.reset_session()
         self._continued_goal = ""
         self._continuation_attempts = 0
-        self._broadcast({"source": "operator", "actions": [], "elapsed": 0.0, "state_only": True})
+        self._broadcast(
+            {"source": "operator", "actions": [], "elapsed": 0.0, "state_only": True}
+        )
         return True, "Conversation reset."
 
     # ── Runtime config ────────────────────────────────────────────────────
@@ -646,7 +723,11 @@ class RobotAgent:
         return mode if mode in {"local", "unitree"} else "local"
 
     def get_name(self) -> str:
-        personality = self.config.get("personality", {}) if isinstance(self.config.get("personality"), dict) else {}
+        personality = (
+            self.config.get("personality", {})
+            if isinstance(self.config.get("personality"), dict)
+            else {}
+        )
         name = str(personality.get("name") or self.config.get("name", "dino")).strip()
         return name if name else "dino"
 
@@ -663,8 +744,13 @@ class RobotAgent:
             except Exception as exc:
                 return False, f"Mode changed in memory but failed to save config: {exc}"
 
-        if mode == "unitree" and not (self.runtime.backend.name == "unitree_g1" and self.runtime.backend.connected):
-            return True, "Mode set to unitree, but hardware is not connected. Local fallback will be used."
+        if mode == "unitree" and not (
+            self.runtime.backend.name == "unitree_g1" and self.runtime.backend.connected
+        ):
+            return (
+                True,
+                "Mode set to unitree, but hardware is not connected. Local fallback will be used.",
+            )
 
         return True, f"Mode set to {mode}."
 
@@ -678,10 +764,14 @@ class RobotAgent:
         persist_secret: bool = False,
     ) -> tuple[bool, str]:
         try:
-            self.runtime.settings.set_model_provider(provider, model=model, api_key=api_key, enabled=enabled)
+            self.runtime.settings.set_model_provider(
+                provider, model=model, api_key=api_key, enabled=enabled
+            )
         except Exception as exc:
             return False, str(exc)
-        self.config["models"] = self.runtime.settings.to_config(include_secrets=False)["models"]
+        self.config["models"] = self.runtime.settings.to_config(include_secrets=False)[
+            "models"
+        ]
 
         if self.tools is not None:
             try:
@@ -696,7 +786,10 @@ class RobotAgent:
                     self.runtime.settings.to_config(include_secrets=persist_secret),
                 )
             except Exception as exc:
-                return False, f"Model settings changed in memory but failed to save config: {exc}"
+                return (
+                    False,
+                    f"Model settings changed in memory but failed to save config: {exc}",
+                )
         return True, f"Model provider set to {provider}."
 
     def set_profile(self, profile: str, persist: bool = True) -> tuple[bool, str]:
@@ -709,13 +802,22 @@ class RobotAgent:
             try:
                 self._rebuild_provider()
             except Exception as exc:
-                return False, f"Profile updated, but failed to reload model provider: {exc}"
+                return (
+                    False,
+                    f"Profile updated, but failed to reload model provider: {exc}",
+                )
 
         if persist:
             try:
-                _persist_config_updates(self._config_path, {"active_profile": self.runtime.profiles.active_name})
+                _persist_config_updates(
+                    self._config_path,
+                    {"active_profile": self.runtime.profiles.active_name},
+                )
             except Exception as exc:
-                return False, f"Profile changed in memory but failed to save config: {exc}"
+                return (
+                    False,
+                    f"Profile changed in memory but failed to save config: {exc}",
+                )
         return True, message
 
     def set_stt_engine(self, engine: str, persist: bool = True) -> tuple[bool, str]:
@@ -728,9 +830,14 @@ class RobotAgent:
         self.config["speech"] = dict(self.runtime.settings.speech)
         if persist:
             try:
-                _persist_config_updates(self._config_path, {"speech": self.config["speech"]})
+                _persist_config_updates(
+                    self._config_path, {"speech": self.config["speech"]}
+                )
             except Exception as exc:
-                return False, f"Speech setting changed in memory but failed to save config: {exc}"
+                return (
+                    False,
+                    f"Speech setting changed in memory but failed to save config: {exc}",
+                )
         return True, f"Speech-to-text engine set to {engine}."
 
     def set_language(self, language: str, persist: bool = True) -> tuple[bool, str]:
@@ -754,11 +861,16 @@ class RobotAgent:
             try:
                 _persist_config_updates(self._config_path, {"language": language})
             except Exception as exc:
-                return False, f"Language changed in memory but failed to save config: {exc}"
+                return (
+                    False,
+                    f"Language changed in memory but failed to save config: {exc}",
+                )
 
         return True, f"Language set to {language}."
 
-    def set_tool_enabled(self, tool: str, enabled: bool, persist: bool = False) -> tuple[bool, str]:
+    def set_tool_enabled(
+        self, tool: str, enabled: bool, persist: bool = False
+    ) -> tuple[bool, str]:
         try:
             self.runtime.settings.set_tool_enabled(tool, enabled)
         except Exception as exc:
@@ -766,9 +878,14 @@ class RobotAgent:
         self.config["tools"] = self.runtime.settings.to_config()["tools"]
         if persist:
             try:
-                _persist_config_updates(self._config_path, {"tools": self.config["tools"]})
+                _persist_config_updates(
+                    self._config_path, {"tools": self.config["tools"]}
+                )
             except Exception as exc:
-                return False, f"Tool setting changed in memory but failed to save config: {exc}"
+                return (
+                    False,
+                    f"Tool setting changed in memory but failed to save config: {exc}",
+                )
         return True, f"Tool {tool} {'enabled' if enabled else 'disabled'}."
 
     def set_robot_identity(self, name: str, persist: bool = True) -> tuple[bool, str]:
@@ -788,9 +905,14 @@ class RobotAgent:
 
         if persist:
             try:
-                _persist_config_updates(self._config_path, {"name": clean_name, "personality": personality})
+                _persist_config_updates(
+                    self._config_path, {"name": clean_name, "personality": personality}
+                )
             except Exception as exc:
-                return False, f"Robot name changed in memory but failed to save config: {exc}"
+                return (
+                    False,
+                    f"Robot name changed in memory but failed to save config: {exc}",
+                )
         return True, f"Robot name set to {clean_name}."
 
     def set_robot_settings(
@@ -807,7 +929,9 @@ class RobotAgent:
                 return False, "Robot name cannot be empty."
         if robot_config is not None:
             try:
-                clean_robot_config = _normalize_robot_config(robot_config, self.config.get("robot", {}))
+                clean_robot_config = _normalize_robot_config(
+                    robot_config, self.config.get("robot", {})
+                )
             except Exception as exc:
                 return False, str(exc)
 
@@ -836,19 +960,25 @@ class RobotAgent:
                 if updates:
                     _persist_config_updates(self._config_path, updates)
             except Exception as exc:
-                return False, f"Robot settings changed in memory but failed to save config: {exc}"
+                return (
+                    False,
+                    f"Robot settings changed in memory but failed to save config: {exc}",
+                )
 
         return True, " ".join(messages) if messages else "No robot settings changed."
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+
 def _resolve_model_path() -> str:
     path = os.environ.get("MODEL_PATH", "")
     if path:
         expanded = sorted(glob.glob(os.path.expanduser(path)))
-        return expanded[0] if expanded else path
+        if expanded:
+            return expanded[0]
     from huggingface_hub import hf_hub_download
+
     print(f"Downloading {HF_REPO}/{HF_FILENAME} (first run only)…")
     return hf_hub_download(repo_id=HF_REPO, filename=HF_FILENAME)
 
@@ -869,7 +999,11 @@ def _build_system_prompt(config: dict, runtime: RobotRuntime) -> str:
 
 
 def _format_personality_block(config: dict) -> str:
-    personality = config.get("personality", {}) if isinstance(config.get("personality"), dict) else {}
+    personality = (
+        config.get("personality", {})
+        if isinstance(config.get("personality"), dict)
+        else {}
+    )
     persona = str(personality.get("persona", "")).strip()
     likes = _format_string_list(personality.get("likes"))
     principles = _format_string_list(personality.get("principles"))
@@ -964,7 +1098,11 @@ def _load_config(config_path: str | Path | None = None) -> dict:
     """
     default = _default_config()
 
-    path = Path(config_path) if config_path else Path(__file__).resolve().parents[2] / "config.json"
+    path = (
+        Path(config_path)
+        if config_path
+        else Path(__file__).resolve().parents[2] / "config.json"
+    )
     if not path.exists():
         return default
 
@@ -989,7 +1127,11 @@ def _default_config() -> dict:
         "personality": {
             "name": "dino",
             "persona": "A warm, curious, practical robot companion that likes helping with robotics and everyday reasoning.",
-            "likes": ["clear plans", "useful autonomy", "learning from the environment"],
+            "likes": [
+                "clear plans",
+                "useful autonomy",
+                "learning from the environment",
+            ],
             "principles": [
                 "be helpful without being intrusive",
                 "ask before disruptive or risky actions",
@@ -1119,7 +1261,9 @@ def _default_config() -> dict:
 SUPPORTED_ROBOT_BACKENDS = {"laptop", "fake", "unitree_g1", "lekiwi", "ros2"}
 
 
-def _normalize_robot_config(robot_config: dict, current_robot_config: dict | None = None) -> dict:
+def _normalize_robot_config(
+    robot_config: dict, current_robot_config: dict | None = None
+) -> dict:
     if not isinstance(robot_config, dict):
         raise ValueError("robot config must be an object")
 
@@ -1144,9 +1288,14 @@ def _normalize_robot_config(robot_config: dict, current_robot_config: dict | Non
     fake = merged.get("fake", {}) if isinstance(merged.get("fake"), dict) else {}
     merged["fake"] = dict(fake)
 
-    unitree = merged.get("unitree_g1", {}) if isinstance(merged.get("unitree_g1"), dict) else {}
+    unitree = (
+        merged.get("unitree_g1", {})
+        if isinstance(merged.get("unitree_g1"), dict)
+        else {}
+    )
     merged["unitree_g1"] = {
-        "network_interface": str(unitree.get("network_interface", "eth0")).strip() or "eth0",
+        "network_interface": str(unitree.get("network_interface", "eth0")).strip()
+        or "eth0",
         "speaker_id": _coerce_int(unitree.get("speaker_id", 0), 0, 0, 1),
         "volume": _coerce_int(unitree.get("volume", 80), 80, 0, 100),
     }
@@ -1161,10 +1310,15 @@ def _normalize_robot_config(robot_config: dict, current_robot_config: dict | Non
     ros2 = merged.get("ros2", {}) if isinstance(merged.get("ros2"), dict) else {}
     merged["ros2"] = {
         "node_name": str(ros2.get("node_name", "actum_node")).strip() or "actum_node",
-        "cmd_vel_topic": str(ros2.get("cmd_vel_topic", "/cmd_vel")).strip() or "/cmd_vel",
+        "cmd_vel_topic": str(ros2.get("cmd_vel_topic", "/cmd_vel")).strip()
+        or "/cmd_vel",
         "odom_topic": str(ros2.get("odom_topic", "/odom")).strip() or "/odom",
-        "joint_states_topic": str(ros2.get("joint_states_topic", "/joint_states")).strip() or "/joint_states",
-        "gripper_topic": str(ros2.get("gripper_topic", "/gripper_cmd")).strip() or "/gripper_cmd",
+        "joint_states_topic": str(
+            ros2.get("joint_states_topic", "/joint_states")
+        ).strip()
+        or "/joint_states",
+        "gripper_topic": str(ros2.get("gripper_topic", "/gripper_cmd")).strip()
+        or "/gripper_cmd",
         "linear_speed": float(ros2.get("linear_speed", 0.25)),
         "angular_speed": float(ros2.get("angular_speed", 0.5)),
     }
@@ -1179,7 +1333,6 @@ def _coerce_int(value, default: int, minimum: int, maximum: int) -> int:
     except (TypeError, ValueError):
         number = default
     return max(minimum, min(maximum, number))
-
 
 
 def _merge_dict(default: dict, override: dict) -> dict:
@@ -1208,6 +1361,7 @@ def _persist_config_updates(config_path: str | Path, updates: dict):
 
 
 # ── CLI entrypoint ─────────────────────────────────────────────────────────────
+
 
 def cli():
     """Headless entrypoint: mic → agent → speaker + stdin commands."""

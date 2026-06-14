@@ -76,15 +76,18 @@ COPY src ./src
 #   unitree → Unitree G1 robot backend (DDS-based locomotion)
 RUN pip install -e ".[camera,openai,whisper,mcp,unitree]"
 
+# Ensure the cache directory exists even if no models are pre-downloaded
+RUN mkdir -p /root/.cache/huggingface
+
 # Pre-download models to avoid runtime delays (optional but recommended).
 # Comment out if you want a smaller image; models will download on first run.
-RUN python3 -c "from huggingface_hub import snapshot_download; \
-    snapshot_download('litert-community/gemma-4-E2B-it-litert-lm', \
-    allow_patterns='gemma-4-E2B-it.litertlm', \
-    cache_dir='/root/.cache/huggingface')" || true
+# RUN python3 -c "from huggingface_hub import snapshot_download; \
+#     snapshot_download('litert-community/gemma-4-E2B-it-litert-lm', \
+#     allow_patterns='gemma-4-E2B-it.litertlm', \
+#     cache_dir='/root/.cache/huggingface')" || true
 
 # Pre-download the default local Whisper model so first voice input is instant.
-RUN python3 -c "from faster_whisper import WhisperModel; WhisperModel('base')" || true
+# RUN python3 -c "from faster_whisper import WhisperModel; WhisperModel('base')" || true
 
 # ── Runtime Stage: Minimal production image ──────────────────────────────
 FROM base as runtime
