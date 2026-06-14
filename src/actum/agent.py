@@ -367,6 +367,7 @@ class RobotAgent:
             )
             if transcript:
                 content.append({"type": "text", "text": f"(voice) {transcript}"})
+                event["text"] = transcript
             else:
                 content.append({"type": "audio", "blob": event["audio"]})
         if event.get("image"):
@@ -821,8 +822,18 @@ class RobotAgent:
         return True, message
 
     def set_stt_engine(self, engine: str, persist: bool = True) -> tuple[bool, str]:
+        return self.update_speech_settings(stt_engine=engine, persist=persist)
+
+    def update_speech_settings(
+        self,
+        stt_engine: str | None = None,
+        whisper_model: str | None = None,
+        persist: bool = True,
+    ) -> tuple[bool, str]:
         try:
-            self.runtime.settings.set_stt_engine(engine)
+            self.runtime.settings.update_speech(
+                stt_engine=stt_engine, whisper_model=whisper_model
+            )
         except Exception as exc:
             return False, str(exc)
         # STT can be swapped live (unlike the LLM provider); rebuild now.
@@ -838,7 +849,7 @@ class RobotAgent:
                     False,
                     f"Speech setting changed in memory but failed to save config: {exc}",
                 )
-        return True, f"Speech-to-text engine set to {engine}."
+        return True, "Speech settings updated successfully."
 
     def set_language(self, language: str, persist: bool = True) -> tuple[bool, str]:
         language = str(language).lower().strip()

@@ -110,7 +110,7 @@
   "speech": {
     "stt_engine": "whisper",
     "_stt_engine_options": "whisper (local) | openai (cloud) | model (multimodal passthrough)",
-    "whisper_model": "base",
+    "whisper_model": "small",
     "_whisper_model_options": "tiny | base | small | medium | large-v3",
     "whisper_compute": "auto"
   },

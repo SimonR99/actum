@@ -21,7 +21,7 @@ import platform
 import threading
 import wave
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 
@@ -321,6 +321,139 @@ class EnergyVAD:
         return None
 
 
+class SileroVAD:
+    """Stateful, real-time Voice Activity Detector using Silero VAD v6.
+
+    Exposes the same interface as EnergyVAD, returning the complete utterance
+    PCM (16 kHz, 1D float32 array) when speech ends, or None.
+    """
+
+    def __init__(
+        self,
+        threshold: float = 0.5,
+        neg_threshold: float = 0.35,
+        min_speech_chunks: int = 8,  # ~250 ms
+        silence_chunks: int = 25,  # ~750 ms
+        pre_roll_chunks: int = 8,  # ~250 ms pre-speech padding
+        max_speech_chunks: int = 500,  # ~15 s max utterance safety cap
+    ):
+        self.threshold = threshold
+        self.neg_threshold = neg_threshold
+        self.min_speech_chunks = min_speech_chunks
+        self.silence_chunks = silence_chunks
+        self.pre_roll_chunks = pre_roll_chunks
+        self.max_speech_chunks = max_speech_chunks
+
+        # Load Silero VAD model via faster-whisper
+        from faster_whisper.vad import get_vad_model
+
+        self._model = get_vad_model()
+        self.reset()
+
+    def reset(self):
+        """Drop any partial capture and reset ONNX states."""
+        self._h = np.zeros((1, 1, 128), dtype="float32")
+        self._c = np.zeros((1, 1, 128), dtype="float32")
+        self._context = np.zeros(64, dtype="float32")
+        self._accumulator = np.array([], dtype="float32")
+
+        self._in_speech = False
+        self._silence_count = 0
+        self._pre_roll: list[np.ndarray] = []
+        self._buffer: list[np.ndarray] = []
+
+    def process(self, chunk: np.ndarray) -> np.ndarray | None:
+        """Feed one audio chunk. Returns complete utterance PCM when speech ends."""
+        self._accumulator = np.concatenate([self._accumulator, chunk])
+
+        window_size = 512
+        result_pcm = None
+
+        while len(self._accumulator) >= window_size:
+            x = self._accumulator[:window_size]
+            self._accumulator = self._accumulator[window_size:]
+
+            # Prepend context to input data (shape: 576)
+            input_data = np.concatenate([self._context, x]).astype(np.float32)
+            # Save context for next window
+            self._context = x[-64:].copy()
+
+            # Run VAD ONNX session
+            output, h, c = self._model.session.run(
+                None,
+                {
+                    "input": input_data.reshape(1, 576),
+                    "h": self._h,
+                    "c": self._c,
+                },
+            )
+            self._h = h
+            self._c = c
+            prob = float(output[0])
+
+            if _env("ACTUM_VAD_DEBUG"):
+                print(
+                    f"[vad] prob={prob:.4f} in_speech={self._in_speech} "
+                    f"sc={self._silence_count} buf_chunks={len(self._buffer)}"
+                )
+
+            if not self._in_speech:
+                self._pre_roll.append(x)
+                if len(self._pre_roll) > self.pre_roll_chunks:
+                    self._pre_roll.pop(0)
+
+                if prob >= self.threshold:
+                    self._in_speech = True
+                    self._silence_count = 0
+                    self._buffer = list(self._pre_roll)
+                    print(f"[vad] speech started (Silero VAD prob={prob:.3f})")
+            else:
+                self._buffer.append(x)
+
+                # Check safety cap to prevent memory leaks/hangs
+                if len(self._buffer) >= self.max_speech_chunks:
+                    print(
+                        f"[vad] speech force-terminated: max duration reached ({len(self._buffer) * 32} ms)"
+                    )
+                    result_pcm = np.concatenate(self._buffer)
+                    self.reset()
+                    break
+
+                if prob < self.neg_threshold:
+                    self._silence_count += 1
+                    if self._silence_count >= self.silence_chunks:
+                        self._in_speech = False
+                        if len(self._buffer) >= self.min_speech_chunks:
+                            result_pcm = np.concatenate(self._buffer)
+                            print(f"[vad] speech ended ({len(self._buffer) * 32} ms)")
+                        self._buffer = []
+                        self._pre_roll = []
+                        # Reset RNN states for the next utterance
+                        self._h = np.zeros((1, 1, 128), dtype="float32")
+                        self._c = np.zeros((1, 1, 128), dtype="float32")
+                        break
+                else:
+                    self._silence_count = max(0, self._silence_count - 1)
+
+        return result_pcm
+
+
+def build_default_vad():
+    """Build the best available VAD: SileroVAD if faster_whisper is present, else EnergyVAD."""
+    try:
+        import faster_whisper.vad
+
+        print(
+            "[audio] Initializing Silero VAD (deep learning) for voice activity detection."
+        )
+        return SileroVAD()
+    except Exception as e:
+        print(
+            f"[audio] Silero VAD unavailable ({e}). Falling back to adaptive EnergyVAD."
+        )
+        return EnergyVAD()
+
+
 # ── Microphone capture ─────────────────────────────────────────────────────────
 
 
@@ -338,12 +471,12 @@ class AudioCapture:
         self,
         on_speech: Callable[[str], None],
         sample_rate: int = SAMPLE_RATE,
-        vad: EnergyVAD | None = None,
+        vad: Any = None,
     ):
         self._on_speech = on_speech
         self._sample_rate = sample_rate
         self._chunk_frames = int(self._sample_rate * CHUNK_MS / 1000)
-        self._vad = vad or EnergyVAD()
+        self._vad = vad or build_default_vad()
         self._stop = threading.Event()
         self._muted = threading.Event()
 

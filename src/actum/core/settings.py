@@ -87,12 +87,22 @@ class RuntimeSettings:
         return self.to_dict()["models"]
 
     def set_stt_engine(self, engine: str) -> dict[str, Any]:
-        name = str(engine).strip().lower()
-        if name not in STT_ENGINES:
-            raise ValueError(
-                f"Unknown STT engine {engine!r}. Choose one of: {', '.join(STT_ENGINES)}"
-            )
-        self.speech["stt_engine"] = name
+        return self.update_speech(stt_engine=engine)
+
+    def update_speech(
+        self,
+        stt_engine: str | None = None,
+        whisper_model: str | None = None,
+    ) -> dict[str, Any]:
+        if stt_engine is not None:
+            name = str(stt_engine).strip().lower()
+            if name not in STT_ENGINES:
+                raise ValueError(
+                    f"Unknown STT engine {stt_engine!r}. Choose one of: {', '.join(STT_ENGINES)}"
+                )
+            self.speech["stt_engine"] = name
+        if whisper_model is not None:
+            self.speech["whisper_model"] = str(whisper_model).strip()
         return dict(self.speech)
 
     def set_tool_enabled(self, tool: str, enabled: bool):

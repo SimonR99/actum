@@ -125,6 +125,7 @@ export const STRINGS = {
     "profile.power_saver": "Économie",
     // speech / stt
     "speech.stt": "Reconnaissance vocale",
+    "speech.whisperModel": "Modèle Whisper",
     "stt.whisper": "Whisper (local)",
     "stt.openai": "OpenAI (cloud)",
     "stt.model": "Modèle multimodal",
@@ -261,6 +262,7 @@ export const STRINGS = {
     "profile.balanced": "Balanced",
     "profile.power_saver": "Power saver",
     "speech.stt": "Speech recognition",
+    "speech.whisperModel": "Whisper model",
     "stt.whisper": "Whisper (local)",
     "stt.openai": "OpenAI (cloud)",
     "stt.model": "Multimodal model",

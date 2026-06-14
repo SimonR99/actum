@@ -359,8 +359,10 @@ def attach_server(agent: RobotAgent, app: FastAPI):
 
     @app.post("/settings/speech")
     async def settings_speech(body: dict):
-        ok, message = agent.set_stt_engine(
-            body.get("stt_engine", ""), persist=bool(body.get("persist", True))
+        ok, message = agent.update_speech_settings(
+            stt_engine=body.get("stt_engine"),
+            whisper_model=body.get("whisper_model"),
+            persist=bool(body.get("persist", True)),
         )
         return JSONResponse(
             {

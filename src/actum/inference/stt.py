@@ -209,11 +209,13 @@ def build_stt(settings: Any) -> STTEngine | None:
     if engine in {"model", "none", ""}:
         return None
     if engine == "whisper":
+        w_lang = str(speech.get("whisper_language", "")).strip().lower()
+        stt_lang = "" if w_lang == "auto" else (w_lang or lang)
         return WhisperSTT(
             model_size=str(speech.get("whisper_model", DEFAULT_WHISPER_MODEL)),
             compute_type=str(speech.get("whisper_compute", "auto")),
             device=str(speech.get("whisper_device", "auto")),
-            language=lang or str(speech.get("whisper_language", "")),
+            language=stt_lang,
         )
     if engine == "openai":
         from actum.inference import resolve_api_key

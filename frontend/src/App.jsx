@@ -1153,6 +1153,19 @@ function ModelSettings({ state, showToast, refresh }) {
     }
   }
 
+  async function applyWhisperModel(next) {
+    try {
+      const payload = await api("/settings/speech", {
+        method: "POST",
+        body: JSON.stringify({ whisper_model: next, persist: true })
+      });
+      showToast(payload.message || t("toast.speechUpdated"));
+      await refresh();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
   async function apply() {
     try {
       const payload = await api("/settings/model", {
@@ -1185,6 +1198,18 @@ function ModelSettings({ state, showToast, refresh }) {
           ))}
         </select>
       </Labeled>
+
+      {speech.stt_engine === "whisper" && (
+        <Labeled label={t("speech.whisperModel")}>
+          <select className="field" value={speech.whisper_model || "base"} onChange={(event) => applyWhisperModel(event.target.value)}>
+            <option value="tiny">tiny</option>
+            <option value="base">base</option>
+            <option value="small">small</option>
+            <option value="medium">medium</option>
+            <option value="large-v3">large-v3</option>
+          </select>
+        </Labeled>
+      )}
 
       <TranscriptionTest showToast={showToast} />
 
