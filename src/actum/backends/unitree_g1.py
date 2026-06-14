@@ -14,7 +14,6 @@ from typing import Any
 from actum.backends.base import RobotBackend
 from actum.core.schema import RobotState, now
 
-
 GESTURES: list[str] = []
 
 _MAX_DRIVE_DISTANCE_M = 1.5
@@ -40,12 +39,17 @@ class UnitreeG1Backend(RobotBackend):
             return True
         try:
             from unitree_sdk2py.core.channel import ChannelFactoryInitialize
-            from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
+            from unitree_sdk2py.g1.arm.g1_arm_action_client import (
+                G1ArmActionClient,
+                action_map,
+            )
             from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
             from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
         except ImportError as exc:
             print(f"[unitree] SDK not installed: {exc}")
-            print("[unitree] Install with: pip install git+https://github.com/unitreerobotics/unitree_sdk2_python.git")
+            print(
+                "[unitree] Install with: pip install git+https://github.com/unitreerobotics/unitree_sdk2_python.git"
+            )
             return False
 
         print(f"[unitree] Connecting via interface {self._interface!r}")
@@ -80,11 +84,26 @@ class UnitreeG1Backend(RobotBackend):
     def speak(self, text: str):
         started = now()
         if not self._audio:
-            return self._result("speak", False, "Unitree audio client is not connected.", started, text=text)
+            return self._result(
+                "speak",
+                False,
+                "Unitree audio client is not connected.",
+                started,
+                text=text,
+            )
         code = self._audio.TtsMaker(text, self._speaker_id)
-        return self._result("speak", code == 0, "Unitree TTS queued." if code == 0 else f"Unitree TTS failed: {code}", started, text=text, code=code)
+        return self._result(
+            "speak",
+            code == 0,
+            "Unitree TTS queued." if code == 0 else f"Unitree TTS failed: {code}",
+            started,
+            text=text,
+            code=code,
+        )
 
-    def _set_velocity(self, vx: float, vy: float, omega: float, duration: float = 0.5) -> bool:
+    def _set_velocity(
+        self, vx: float, vy: float, omega: float, duration: float = 0.5
+    ) -> bool:
         if not self._loco:
             return False
         code = self._loco.SetVelocity(vx, vy, omega, duration)
@@ -95,13 +114,31 @@ class UnitreeG1Backend(RobotBackend):
     def drive(self, direction: str, distance_m: float = 0.5):
         started = now()
         if not self._loco:
-            return self._result("drive", False, "Unitree locomotion client is not connected.", started, direction=direction, distance_m=distance_m)
+            return self._result(
+                "drive",
+                False,
+                "Unitree locomotion client is not connected.",
+                started,
+                direction=direction,
+                distance_m=distance_m,
+            )
         if direction == "stop":
             ok = self._set_velocity(0.0, 0.0, 0.0, 0.1)
-            return self._result("drive", ok, "Stopped." if ok else "Stop failed.", started, direction=direction, distance_m=0.0)
+            return self._result(
+                "drive",
+                ok,
+                "Stopped." if ok else "Stop failed.",
+                started,
+                direction=direction,
+                distance_m=0.0,
+            )
 
         distance = min(max(abs(float(distance_m)), 0.0), _MAX_DRIVE_DISTANCE_M)
-        duration = min(distance / _DRIVE_SPEED_MPS, _MAX_MOTION_DURATION_S) if distance else 0.0
+        duration = (
+            min(distance / _DRIVE_SPEED_MPS, _MAX_MOTION_DURATION_S)
+            if distance
+            else 0.0
+        )
         vx, vy = 0.0, 0.0
         if direction == "forward":
             vx = _DRIVE_SPEED_MPS
@@ -112,48 +149,124 @@ class UnitreeG1Backend(RobotBackend):
         elif direction == "right":
             vy = -_DRIVE_SPEED_MPS
         else:
-            return self._result("drive", False, f"Invalid direction: {direction}", started, direction=direction, distance_m=distance)
+            return self._result(
+                "drive",
+                False,
+                f"Invalid direction: {direction}",
+                started,
+                direction=direction,
+                distance_m=distance,
+            )
 
         ok = self._set_velocity(vx, vy, 0.0, duration)
         if ok and duration:
             time.sleep(duration)
             self._set_velocity(0.0, 0.0, 0.0, 0.1)
-        return self._result("drive", ok, f"Moved {direction} {distance:.2f} m." if ok else "Move failed.", started, direction=direction, distance_m=distance, duration_s=duration)
+        return self._result(
+            "drive",
+            ok,
+            f"Moved {direction} {distance:.2f} m." if ok else "Move failed.",
+            started,
+            direction=direction,
+            distance_m=distance,
+            duration_s=duration,
+        )
 
     def rotate(self, degrees: float):
         started = now()
         if not self._loco:
-            return self._result("rotate", False, "Unitree locomotion client is not connected.", started, degrees=degrees)
+            return self._result(
+                "rotate",
+                False,
+                "Unitree locomotion client is not connected.",
+                started,
+                degrees=degrees,
+            )
         angle = max(min(float(degrees), 180.0), -180.0)
-        duration = min(abs(radians(angle)) / _ROTATE_SPEED_RADPS, _MAX_MOTION_DURATION_S) if angle else 0.0
+        duration = (
+            min(abs(radians(angle)) / _ROTATE_SPEED_RADPS, _MAX_MOTION_DURATION_S)
+            if angle
+            else 0.0
+        )
         omega = -_ROTATE_SPEED_RADPS if angle > 0 else _ROTATE_SPEED_RADPS
         ok = True if angle == 0 else self._set_velocity(0.0, 0.0, omega, duration)
         if ok and duration:
             time.sleep(duration)
             self._set_velocity(0.0, 0.0, 0.0, 0.1)
-        return self._result("rotate", ok, f"Rotated {angle:+.0f} deg." if ok else "Rotate failed.", started, degrees=angle, duration_s=duration)
+        return self._result(
+            "rotate",
+            ok,
+            f"Rotated {angle:+.0f} deg." if ok else "Rotate failed.",
+            started,
+            degrees=angle,
+            duration_s=duration,
+        )
 
     def gesture(self, name: str):
         started = now()
         if not self._arm:
-            return self._result("gesture", False, "Unitree arm client is not connected.", started, gesture=name)
+            return self._result(
+                "gesture",
+                False,
+                "Unitree arm client is not connected.",
+                started,
+                gesture=name,
+            )
         try:
             from unitree_sdk2py.g1.arm.g1_arm_action_client import action_map
         except ImportError:
-            return self._result("gesture", False, "Unitree SDK action map is unavailable.", started, gesture=name)
+            return self._result(
+                "gesture",
+                False,
+                "Unitree SDK action map is unavailable.",
+                started,
+                gesture=name,
+            )
 
         action_id = action_map.get(name)
         if action_id is None:
-            return self._result("gesture", False, f"Unknown gesture: {name}", started, gesture=name, available=sorted(action_map.keys()))
+            return self._result(
+                "gesture",
+                False,
+                f"Unknown gesture: {name}",
+                started,
+                gesture=name,
+                available=sorted(action_map.keys()),
+            )
         code = self._arm.ExecuteAction(action_id)
-        return self._result("gesture", code == 0, f"Gesture {name} executed." if code == 0 else f"Gesture failed: {code}", started, gesture=name, action_id=action_id, code=code)
+        return self._result(
+            "gesture",
+            code == 0,
+            f"Gesture {name} executed." if code == 0 else f"Gesture failed: {code}",
+            started,
+            gesture=name,
+            action_id=action_id,
+            code=code,
+        )
 
     def set_led(self, r: int, g: int, b: int):
         started = now()
         if not self._audio:
-            return self._result("set_led", False, "Unitree audio/LED client is not connected.", started, r=r, g=g, b=b)
+            return self._result(
+                "set_led",
+                False,
+                "Unitree audio/LED client is not connected.",
+                started,
+                r=r,
+                g=g,
+                b=b,
+            )
         code = self._audio.LedControl(r, g, b)
-        return self._result("set_led", code == 0, "LED updated." if code == 0 else f"LED update failed: {code}", started, r=r, g=g, b=b, code=code)
+        return self._result(
+            "set_led",
+            code == 0,
+            "LED updated." if code == 0 else f"LED update failed: {code}",
+            started,
+            r=r,
+            g=g,
+            b=b,
+            code=code,
+        )
 
     def stop(self):
         started = now()

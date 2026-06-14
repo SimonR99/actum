@@ -50,7 +50,9 @@ def agent(tmp_path):
 def test_turn_keeps_final_plain_text_reply(agent):
     agent.provider = StubProvider(reply="The dock is two meters ahead.")
 
-    actions = asyncio.run(agent.process_event({"source": "chat", "text": "where is the dock?"}))
+    actions = asyncio.run(
+        agent.process_event({"source": "chat", "text": "where is the dock?"})
+    )
 
     assert actions[-1]["type"] == "reply"
     assert actions[-1]["text"] == "The dock is two meters ahead."

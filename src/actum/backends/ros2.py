@@ -23,11 +23,23 @@ class ROS2Backend(RobotBackend):
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
-        self._node_name = str(self.config.get("node_name", "actum_node")).strip() or "actum_node"
-        self._cmd_vel_topic = str(self.config.get("cmd_vel_topic", "/cmd_vel")).strip() or "/cmd_vel"
-        self._odom_topic = str(self.config.get("odom_topic", "/odom")).strip() or "/odom"
-        self._joint_states_topic = str(self.config.get("joint_states_topic", "/joint_states")).strip() or "/joint_states"
-        self._gripper_topic = str(self.config.get("gripper_topic", "/gripper_cmd")).strip() or "/gripper_cmd"
+        self._node_name = (
+            str(self.config.get("node_name", "actum_node")).strip() or "actum_node"
+        )
+        self._cmd_vel_topic = (
+            str(self.config.get("cmd_vel_topic", "/cmd_vel")).strip() or "/cmd_vel"
+        )
+        self._odom_topic = (
+            str(self.config.get("odom_topic", "/odom")).strip() or "/odom"
+        )
+        self._joint_states_topic = (
+            str(self.config.get("joint_states_topic", "/joint_states")).strip()
+            or "/joint_states"
+        )
+        self._gripper_topic = (
+            str(self.config.get("gripper_topic", "/gripper_cmd")).strip()
+            or "/gripper_cmd"
+        )
 
         self._linear_speed = float(self.config.get("linear_speed", 0.25))
         self._angular_speed = float(self.config.get("angular_speed", 0.5))
@@ -62,7 +74,9 @@ class ROS2Backend(RobotBackend):
             from std_msgs.msg import String
         except ImportError as exc:
             print(f"[ros2] ROS 2 python dependencies not installed or sourced: {exc}")
-            print("[ros2] Ensure ROS 2 environment is sourced (e.g. source /opt/ros/jazzy/setup.bash)")
+            print(
+                "[ros2] Ensure ROS 2 environment is sourced (e.g. source /opt/ros/jazzy/setup.bash)"
+            )
             return False
 
         try:
@@ -74,8 +88,12 @@ class ROS2Backend(RobotBackend):
             self._executor.add_node(self._node)
 
             # Create publishers
-            self._cmd_vel_pub = self._node.create_publisher(Twist, self._cmd_vel_topic, 10)
-            self._gripper_pub = self._node.create_publisher(String, self._gripper_topic, 10)
+            self._cmd_vel_pub = self._node.create_publisher(
+                Twist, self._cmd_vel_topic, 10
+            )
+            self._gripper_pub = self._node.create_publisher(
+                String, self._gripper_topic, 10
+            )
 
             # Create subscribers
             self._odom_sub = self._node.create_subscription(
@@ -99,6 +117,7 @@ class ROS2Backend(RobotBackend):
 
     def close(self):
         import rclpy
+
         with self._lock:
             if self._executor:
                 self._executor.shutdown()
@@ -117,7 +136,9 @@ class ROS2Backend(RobotBackend):
         """Update pose cache from Odometry message."""
         position = msg.pose.pose.position
         orientation = msg.pose.pose.orientation
-        yaw_rad = quaternion_to_euler_yaw(orientation.x, orientation.y, orientation.z, orientation.w)
+        yaw_rad = quaternion_to_euler_yaw(
+            orientation.x, orientation.y, orientation.z, orientation.w
+        )
         with self._lock:
             self._pose = {
                 "x": float(position.x),
@@ -175,7 +196,9 @@ class ROS2Backend(RobotBackend):
 
         if direction == "stop":
             self.stop()
-            return self._result("drive", True, "Stopped.", started, direction=direction, distance_m=0.0)
+            return self._result(
+                "drive", True, "Stopped.", started, direction=direction, distance_m=0.0
+            )
 
         distance = abs(float(distance_m))
         duration = distance / self._linear_speed if self._linear_speed > 0 else 0.0
@@ -200,6 +223,7 @@ class ROS2Backend(RobotBackend):
             )
 
         from geometry_msgs.msg import Twist
+
         msg = Twist()
         msg.linear.x = vx
         msg.linear.y = vy
@@ -234,10 +258,15 @@ class ROS2Backend(RobotBackend):
             )
 
         angle = float(degrees)
-        duration = abs(math.radians(angle)) / self._angular_speed if self._angular_speed > 0 else 0.0
+        duration = (
+            abs(math.radians(angle)) / self._angular_speed
+            if self._angular_speed > 0
+            else 0.0
+        )
         omega = -self._angular_speed if angle > 0 else self._angular_speed
 
         from geometry_msgs.msg import Twist
+
         msg = Twist()
         msg.angular.z = omega
 
@@ -269,6 +298,7 @@ class ROS2Backend(RobotBackend):
             )
 
         from std_msgs.msg import String
+
         msg = String()
         msg.data = action
         self._gripper_pub.publish(msg)
@@ -285,6 +315,7 @@ class ROS2Backend(RobotBackend):
         started = now()
         if self.connected and self._cmd_vel_pub:
             from geometry_msgs.msg import Twist
+
             msg = Twist()
             self._cmd_vel_pub.publish(msg)
             return self._result("stop", True, "Published zero velocity stop.", started)

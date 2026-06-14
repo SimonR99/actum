@@ -30,7 +30,6 @@ from fastapi.staticfiles import StaticFiles
 from actum.agent import RobotAgent
 from actum.perception import AudioCapture
 
-
 # ── Dashboard assets ────────────────────────────────────────────────────────
 
 _DASHBOARD_PATH = Path(__file__).with_name("dashboard.html")
@@ -43,10 +42,13 @@ def _load_dashboard_html() -> str:
         return _DASHBOARD_PATH.read_text(encoding="utf-8")
     except Exception as exc:
         # Fallback keeps server usable even if the HTML file is missing.
-        return f"<html><body><h1>Dashboard unavailable</h1><pre>{exc}</pre></body></html>"
+        return (
+            f"<html><body><h1>Dashboard unavailable</h1><pre>{exc}</pre></body></html>"
+        )
 
 
 # ── Camera streaming ───────────────────────────────────────────────────────────
+
 
 class CameraFrameStream:
     """Continuously keep the freshest dashboard frame outside the WebSocket loop."""
@@ -67,7 +69,9 @@ class CameraFrameStream:
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="actum-camera-stream", daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, name="actum-camera-stream", daemon=True
+        )
         self._thread.start()
 
     def stop(self):
@@ -104,6 +108,7 @@ class CameraFrameStream:
 
 # ── Route attachment ───────────────────────────────────────────────────────────
 
+
 def attach_server(agent: RobotAgent, app: FastAPI):
     """Wire monitoring routes onto a FastAPI app."""
     _init_server_state(app)
@@ -129,7 +134,9 @@ def attach_server(agent: RobotAgent, app: FastAPI):
         text = (body.get("text") or "").strip()
         if not text:
             return JSONResponse({"error": "empty command"}, status_code=400)
-        await agent.event_bus.put({"source": "chat", "text": text, "force": bool(body.get("force", True))})
+        await agent.event_bus.put(
+            {"source": "chat", "text": text, "force": bool(body.get("force", True))}
+        )
         return {"queued": text}
 
     @app.post("/trigger/{source}")
@@ -140,7 +147,9 @@ def attach_server(agent: RobotAgent, app: FastAPI):
         body = body or {}
         source = source.strip().lower()
         if source not in {"vision", "chat", "language", "voice", "timer", "cron"}:
-            return JSONResponse({"error": "unsupported trigger source"}, status_code=400)
+            return JSONResponse(
+                {"error": "unsupported trigger source"}, status_code=400
+            )
         event = {
             "source": "language" if source == "voice" else source,
             "text": str(body.get("text") or ""),
@@ -176,39 +185,63 @@ def attach_server(agent: RobotAgent, app: FastAPI):
         info: dict = {"engine": engine_name}
 
         if not audio:
-            return JSONResponse({**info, "ok": False, "error": "No audio provided."}, status_code=400)
+            return JSONResponse(
+                {**info, "ok": False, "error": "No audio provided."}, status_code=400
+            )
         try:
             info["audio_bytes"] = len(base64.b64decode(audio))
         except Exception:
-            return JSONResponse({**info, "ok": False, "error": "Audio is not valid base64."}, status_code=400)
+            return JSONResponse(
+                {**info, "ok": False, "error": "Audio is not valid base64."},
+                status_code=400,
+            )
 
         # Pre-flight dependency checks → clear guidance instead of empty output.
-        if engine_name == "whisper" and importlib.util.find_spec("faster_whisper") is None:
-            return {**info, "ok": False, "transcript": "",
-                    "error": "faster-whisper is not installed. Install with  pip install -e '.[whisper]'  "
-                             "or pick OpenAI / Multimodal model as the speech engine."}
+        if (
+            engine_name == "whisper"
+            and importlib.util.find_spec("faster_whisper") is None
+        ):
+            return {
+                **info,
+                "ok": False,
+                "transcript": "",
+                "error": "faster-whisper is not installed. Install with  pip install -e '.[whisper]'  "
+                "or pick OpenAI / Multimodal model as the speech engine.",
+            }
         if engine_name == "openai" and importlib.util.find_spec("openai") is None:
-            return {**info, "ok": False, "transcript": "",
-                    "error": "openai is not installed. Install with  pip install -e '.[openai]'."}
+            return {
+                **info,
+                "ok": False,
+                "transcript": "",
+                "error": "openai is not installed. Install with  pip install -e '.[openai]'.",
+            }
 
         from actum.inference.stt import build_stt
 
         engine = build_stt(settings)
         if engine is None:
-            return {**info, "ok": True, "transcript": "",
-                    "note": "Engine 'model' sends audio straight to the multimodal LLM, so there is no "
-                            "standalone transcript to show. Switch to Whisper or OpenAI to test STT."}
+            return {
+                **info,
+                "ok": True,
+                "transcript": "",
+                "note": "Engine 'model' sends audio straight to the multimodal LLM, so there is no "
+                "standalone transcript to show. Switch to Whisper or OpenAI to test STT.",
+            }
 
         started = time.time()
         try:
-            text = await asyncio.get_running_loop().run_in_executor(None, engine.transcribe, audio)
+            text = await asyncio.get_running_loop().run_in_executor(
+                None, engine.transcribe, audio
+            )
         except Exception as exc:  # surface engine/runtime errors to the operator
             return {**info, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
         info["elapsed"] = round(time.time() - started, 2)
         info["transcript"] = text
         info["ok"] = bool(text)
         if not text:
-            info["note"] = "Engine ran but produced no text — audio may be too short/quiet, or transcription failed (check server logs)."
+            info["note"] = (
+                "Engine ran but produced no text — audio may be too short/quiet, or transcription failed (check server logs)."
+            )
         return info
 
     @app.get("/settings")
@@ -271,7 +304,9 @@ def attach_server(agent: RobotAgent, app: FastAPI):
         persist = bool(body.get("persist", True))
         name = body.get("name") if "name" in body else None
         robot_config = body.get("robot") if "robot" in body else None
-        ok, message = agent.set_robot_settings(name=name, robot_config=robot_config, persist=persist)
+        ok, message = agent.set_robot_settings(
+            name=name, robot_config=robot_config, persist=persist
+        )
         return JSONResponse(
             {
                 "ok": ok,
@@ -297,10 +332,14 @@ def attach_server(agent: RobotAgent, app: FastAPI):
                 enabled=body.get("enabled"),
                 persist=bool(body.get("persist", False)),
                 persist_secret=bool(body.get("persist_secret", False)),
-            )
+            ),
         )
         return JSONResponse(
-            {"ok": ok, "message": message, "settings": agent.runtime.settings.to_dict()},
+            {
+                "ok": ok,
+                "message": message,
+                "settings": agent.runtime.settings.to_dict(),
+            },
             status_code=200 if ok else 400,
         )
 
@@ -309,7 +348,9 @@ def attach_server(agent: RobotAgent, app: FastAPI):
         loop = asyncio.get_running_loop()
         ok, message = await loop.run_in_executor(
             None,
-            lambda: agent.set_profile(body.get("profile", ""), persist=bool(body.get("persist", True)))
+            lambda: agent.set_profile(
+                body.get("profile", ""), persist=bool(body.get("persist", True))
+            ),
         )
         return JSONResponse(
             {"ok": ok, "message": message, "profile": agent.runtime.profiles.to_dict()},
@@ -318,9 +359,15 @@ def attach_server(agent: RobotAgent, app: FastAPI):
 
     @app.post("/settings/speech")
     async def settings_speech(body: dict):
-        ok, message = agent.set_stt_engine(body.get("stt_engine", ""), persist=bool(body.get("persist", True)))
+        ok, message = agent.set_stt_engine(
+            body.get("stt_engine", ""), persist=bool(body.get("persist", True))
+        )
         return JSONResponse(
-            {"ok": ok, "message": message, "settings": agent.runtime.settings.to_dict()},
+            {
+                "ok": ok,
+                "message": message,
+                "settings": agent.runtime.settings.to_dict(),
+            },
             status_code=200 if ok else 400,
         )
 
@@ -347,7 +394,11 @@ def attach_server(agent: RobotAgent, app: FastAPI):
             persist=bool(body.get("persist", False)),
         )
         return JSONResponse(
-            {"ok": ok, "message": message, "settings": agent.runtime.settings.to_dict()},
+            {
+                "ok": ok,
+                "message": message,
+                "settings": agent.runtime.settings.to_dict(),
+            },
             status_code=200 if ok else 400,
         )
 
@@ -356,7 +407,9 @@ def attach_server(agent: RobotAgent, app: FastAPI):
         not_ready = _not_ready_response(app)
         if not_ready:
             return not_ready
-        ok, message = await asyncio.get_running_loop().run_in_executor(None, agent.reset_conversation)
+        ok, message = await asyncio.get_running_loop().run_in_executor(
+            None, agent.reset_conversation
+        )
         return JSONResponse(
             {"ok": ok, "message": message, "state": agent.runtime.snapshot()},
             status_code=200 if ok else 400,
@@ -367,8 +420,12 @@ def attach_server(agent: RobotAgent, app: FastAPI):
         name = str(body.get("name") or "").strip()
         instruction = str(body.get("instruction") or "").strip()
         if not name or not instruction:
-            return JSONResponse({"error": "name and instruction are required"}, status_code=400)
-        job = agent.runtime.add_cron_job(name, float(body.get("every_seconds", 60)), instruction)
+            return JSONResponse(
+                {"error": "name and instruction are required"}, status_code=400
+            )
+        job = agent.runtime.add_cron_job(
+            name, float(body.get("every_seconds", 60)), instruction
+        )
         return {"job": job, "state": agent.runtime.snapshot()}
 
     @app.websocket("/events")
@@ -389,8 +446,12 @@ def attach_server(agent: RobotAgent, app: FastAPI):
             await ws.send_text(json.dumps(payload))
 
         # Send current state on connect
-        await ws.send_text(json.dumps({"type": "memory", "data": agent.runtime.memory.snapshot()}))
-        await ws.send_text(json.dumps({"type": "state", "data": _state_snapshot(agent, app)}))
+        await ws.send_text(
+            json.dumps({"type": "memory", "data": agent.runtime.memory.snapshot()})
+        )
+        await ws.send_text(
+            json.dumps({"type": "state", "data": _state_snapshot(agent, app)})
+        )
         await ws.send_text(
             json.dumps(
                 {
@@ -428,8 +489,16 @@ def attach_server(agent: RobotAgent, app: FastAPI):
                             }
                         )
                     )
-                    await ws.send_text(json.dumps({"type": "memory", "data": agent.runtime.memory.snapshot()}))
-                    await ws.send_text(json.dumps({"type": "state", "data": _state_snapshot(agent, app)}))
+                    await ws.send_text(
+                        json.dumps(
+                            {"type": "memory", "data": agent.runtime.memory.snapshot()}
+                        )
+                    )
+                    await ws.send_text(
+                        json.dumps(
+                            {"type": "state", "data": _state_snapshot(agent, app)}
+                        )
+                    )
 
                 await send_latest_frame()
         except WebSocketDisconnect:
@@ -478,11 +547,16 @@ def _not_ready_response(app: FastAPI) -> JSONResponse | None:
     status = _server_status(app)
     if status["ready"]:
         return None
-    message = "Agent runtime is still loading." if status["status"] != "failed" else f"Agent startup failed: {status['error']}"
+    message = (
+        "Agent runtime is still loading."
+        if status["status"] != "failed"
+        else f"Agent startup failed: {status['error']}"
+    )
     return JSONResponse({"error": message, "server": status}, status_code=503)
 
 
 # ── Lifespan ───────────────────────────────────────────────────────────────────
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -493,7 +567,9 @@ async def lifespan(app: FastAPI):
 
     async def start_runtime():
         _set_server_status(app, "loading", ready=False)
-        agent.runtime.events.append("server.loading", "server", message="Loading models and hardware.")
+        agent.runtime.events.append(
+            "server.loading", "server", message="Loading models and hardware."
+        )
         print("Loading models…")
         try:
             await loop.run_in_executor(None, agent.load_models)
@@ -502,9 +578,13 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             message = str(exc)
             _set_server_status(app, "failed", ready=False, error=message)
-            agent.runtime.events.append("server.failed", "server", message=message, error=message)
+            agent.runtime.events.append(
+                "server.failed", "server", message=message, error=message
+            )
             print(f"[server] startup failed: {message}")
-            agent._broadcast({"source": "server", "actions": [], "elapsed": 0.0, "state_only": True})
+            agent._broadcast(
+                {"source": "server", "actions": [], "elapsed": 0.0, "state_only": True}
+            )
             return
 
         if camera_stream:
@@ -525,8 +605,12 @@ async def lifespan(app: FastAPI):
         app.state.agent_task = asyncio.create_task(agent.run())
         app.state.background_task = asyncio.create_task(agent.background_loop())
         _set_server_status(app, "ready", ready=True, error="")
-        agent.runtime.events.append("server.ready", "server", message="Agent runtime ready.")
-        agent._broadcast({"source": "server", "actions": [], "elapsed": 0.0, "state_only": True})
+        agent.runtime.events.append(
+            "server.ready", "server", message="Agent runtime ready."
+        )
+        agent._broadcast(
+            {"source": "server", "actions": [], "elapsed": 0.0, "state_only": True}
+        )
 
     app.state.startup_task = asyncio.create_task(start_runtime())
     yield
@@ -555,6 +639,7 @@ async def lifespan(app: FastAPI):
 
 
 # ── CLI entrypoint ─────────────────────────────────────────────────────────────
+
 
 def cli():
     """Agent + monitoring server entrypoint."""

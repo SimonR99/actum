@@ -10,7 +10,9 @@ def test_resolve_model_path_expands_wildcard(monkeypatch, tmp_path):
     model_file = model_dir / "gemma.litertlm"
     model_file.write_text("fake", encoding="utf-8")
 
-    monkeypatch.setenv("MODEL_PATH", str(tmp_path / "hub" / "snapshots" / "*" / "gemma.litertlm"))
+    monkeypatch.setenv(
+        "MODEL_PATH", str(tmp_path / "hub" / "snapshots" / "*" / "gemma.litertlm")
+    )
 
     assert _resolve_model_path() == str(model_file)
 
@@ -18,7 +20,14 @@ def test_resolve_model_path_expands_wildcard(monkeypatch, tmp_path):
 def test_robot_backend_config_selects_unitree(tmp_path):
     config_path = tmp_path / "config.json"
     config_path.write_text(
-        json.dumps({"robot": {"backend": "unitree_g1", "unitree_g1": {"network_interface": "eth0"}}}),
+        json.dumps(
+            {
+                "robot": {
+                    "backend": "unitree_g1",
+                    "unitree_g1": {"network_interface": "eth0"},
+                }
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -49,7 +58,13 @@ def test_default_config_uses_laptop_backend(tmp_path):
 def test_personality_name_overrides_legacy_name(tmp_path):
     config_path = tmp_path / "config.json"
     config_path.write_text(
-        json.dumps({"name": "legacy", "personality": {"name": "Nova"}, "memory": {"path": str(tmp_path / "memory.json")}}),
+        json.dumps(
+            {
+                "name": "legacy",
+                "personality": {"name": "Nova"},
+                "memory": {"path": str(tmp_path / "memory.json")},
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -119,4 +134,3 @@ def test_language_setting_updates_prompt_and_persists(tmp_path):
     # Verify invalid language fails
     ok, message = agent.set_language("de", persist=False)
     assert ok is False
-

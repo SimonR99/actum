@@ -58,7 +58,9 @@ class OpenAIProvider(InferenceProvider):
         print(f"OpenAI provider ready ({self._model}).")
 
     def send(self, content: list[dict[str, Any]]) -> str:
-        self._messages.append({"role": "user", "content": self._to_openai_content(content)})
+        self._messages.append(
+            {"role": "user", "content": self._to_openai_content(content)}
+        )
         final_text = ""
         for _ in range(_MAX_TOOL_ROUNDS):
             response = self._client.chat.completions.create(
@@ -125,9 +127,11 @@ class OpenAIProvider(InferenceProvider):
                 blocks.append(
                     {
                         "type": "text",
-                        "text": f"(voice transcript) {transcript}"
-                        if transcript
-                        else "[voice message could not be transcribed]",
+                        "text": (
+                            f"(voice transcript) {transcript}"
+                            if transcript
+                            else "[voice message could not be transcribed]"
+                        ),
                     }
                 )
         return blocks or [{"type": "text", "text": ""}]

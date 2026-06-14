@@ -23,7 +23,9 @@ def test_unknown_profile_falls_back_to_balanced():
 
 
 def test_runtime_applies_profile_to_provider_and_loop_rates():
-    runtime = RobotRuntime({"robot": {"backend": "fake"}, "active_profile": "fast"}, "bot")
+    runtime = RobotRuntime(
+        {"robot": {"backend": "fake"}, "active_profile": "fast"}, "bot"
+    )
 
     assert runtime.settings.models["active_provider"] == "openai"
     assert runtime.compute_backend == "gpu"
@@ -33,7 +35,9 @@ def test_runtime_applies_profile_to_provider_and_loop_rates():
 
 
 def test_set_profile_updates_loop_rates():
-    runtime = RobotRuntime({"robot": {"backend": "fake"}, "active_profile": "balanced"}, "bot")
+    runtime = RobotRuntime(
+        {"robot": {"backend": "fake"}, "active_profile": "balanced"}, "bot"
+    )
     ok, _ = runtime.set_profile("power_saver")
 
     assert ok is True
@@ -42,7 +46,9 @@ def test_set_profile_updates_loop_rates():
 
 
 def test_build_provider_selects_litert_and_openai():
-    runtime = RobotRuntime({"robot": {"backend": "fake"}, "active_profile": "balanced"}, "bot")
+    runtime = RobotRuntime(
+        {"robot": {"backend": "fake"}, "active_profile": "balanced"}, "bot"
+    )
 
     local = build_provider(
         runtime.settings,
@@ -72,7 +78,9 @@ def test_default_stt_engine_is_local_whisper():
 
 
 def test_stt_engine_selection_and_validation():
-    runtime = RobotRuntime({"robot": {"backend": "fake"}, "speech": {"stt_engine": "openai"}}, "bot")
+    runtime = RobotRuntime(
+        {"robot": {"backend": "fake"}, "speech": {"stt_engine": "openai"}}, "bot"
+    )
     assert isinstance(build_stt(runtime.settings), OpenAISTT)
 
     runtime.settings.set_stt_engine("model")

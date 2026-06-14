@@ -8,7 +8,6 @@ from typing import Any
 
 from actum.core.schema import PlanStep, now
 
-
 _LIST_PREFIX = re.compile(r"^\s*(?:[-*]|\d+[.)])\s*")
 
 

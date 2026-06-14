@@ -32,7 +32,9 @@ class FakeBackend(RobotBackend):
     def speak(self, text: str):
         started = now()
         self._remember("speak", text=text)
-        return self._result("speak", True, f"Simulated speech: {text}", started, text=text)
+        return self._result(
+            "speak", True, f"Simulated speech: {text}", started, text=text
+        )
 
     def drive(self, direction: str, distance_m: float = 0.5):
         started = now()
@@ -46,25 +48,53 @@ class FakeBackend(RobotBackend):
         elif direction == "right":
             self.pose["y"] -= distance
         elif direction != "stop":
-            return self._result("drive", False, f"Invalid direction: {direction}", started, direction=direction, distance_m=distance)
+            return self._result(
+                "drive",
+                False,
+                f"Invalid direction: {direction}",
+                started,
+                direction=direction,
+                distance_m=distance,
+            )
         self._remember("drive", direction=direction, distance_m=distance)
-        return self._result("drive", True, f"Simulated move {direction} {distance:.2f} m.", started, direction=direction, distance_m=distance)
+        return self._result(
+            "drive",
+            True,
+            f"Simulated move {direction} {distance:.2f} m.",
+            started,
+            direction=direction,
+            distance_m=distance,
+        )
 
     def rotate(self, degrees: float):
         started = now()
         self.pose["yaw_deg"] += float(degrees)
         self._remember("rotate", degrees=float(degrees))
-        return self._result("rotate", True, f"Simulated rotate {degrees:+.0f} deg.", started, degrees=float(degrees))
+        return self._result(
+            "rotate",
+            True,
+            f"Simulated rotate {degrees:+.0f} deg.",
+            started,
+            degrees=float(degrees),
+        )
 
     def gripper(self, action: str):
         started = now()
         self._remember("gripper", gripper_action=action)
-        return self._result("gripper", True, f"Simulated gripper {action}.", started, gripper_action=action)
+        return self._result(
+            "gripper",
+            True,
+            f"Simulated gripper {action}.",
+            started,
+            gripper_action=action,
+        )
 
     def gesture(self, name: str):
         started = now()
         self._remember("gesture", gesture=name)
-        return self._result("gesture", True, f"Simulated gesture {name}.", started, gesture=name)
+        return self._result(
+            "gesture", True, f"Simulated gesture {name}.", started, gesture=name
+        )
 
     def stop(self):
         started = now()

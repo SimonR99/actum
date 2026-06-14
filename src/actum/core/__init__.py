@@ -1,7 +1,14 @@
 """Core runtime primitives for the robot agent."""
 
 from actum.core.capabilities import Capability, CapabilityRegistry
-from actum.core.autonomy import BehaviorNode, BehaviorTreeState, BodyPerception, CronJob, CronRegistry, SpatialMap
+from actum.core.autonomy import (
+    BehaviorNode,
+    BehaviorTreeState,
+    BodyPerception,
+    CronJob,
+    CronRegistry,
+    SpatialMap,
+)
 from actum.core.companion import CompanionDecision, CompanionPolicy
 from actum.core.events import EventLog
 from actum.core.intent import IntentState

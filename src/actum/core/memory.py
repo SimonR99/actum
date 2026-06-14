@@ -73,13 +73,19 @@ class MemoryStore:
         place["updated_at"] = now()
         self.flush()
 
-    def record_observation(self, summary: str, source: str = "vision", **data: Any) -> MemoryRecord:
+    def record_observation(
+        self, summary: str, source: str = "vision", **data: Any
+    ) -> MemoryRecord:
         return self._append_record("observation", summary, source, data)
 
-    def record_episode(self, summary: str, source: str = "agent", **data: Any) -> MemoryRecord:
+    def record_episode(
+        self, summary: str, source: str = "agent", **data: Any
+    ) -> MemoryRecord:
         return self._append_record("episode", summary, source, data)
 
-    def remember_spatial_note(self, summary: str, source: str = "agent", **data: Any) -> MemoryRecord:
+    def remember_spatial_note(
+        self, summary: str, source: str = "agent", **data: Any
+    ) -> MemoryRecord:
         record = self._new_record("spatial", summary, source, data)
         self.spatial_notes.append(record)
         self.flush()
@@ -106,12 +112,16 @@ class MemoryStore:
         if self.people:
             lines.append("People:")
             for name, person in list(self.people.items())[:6]:
-                latest = person.get("notes", [])[-1]["text"] if person.get("notes") else ""
+                latest = (
+                    person.get("notes", [])[-1]["text"] if person.get("notes") else ""
+                )
                 lines.append(f"  {name}: {latest}")
         if self.places:
             lines.append("Places:")
             for name, place in list(self.places.items())[:6]:
-                latest = place.get("notes", [])[-1]["text"] if place.get("notes") else ""
+                latest = (
+                    place.get("notes", [])[-1]["text"] if place.get("notes") else ""
+                )
                 lines.append(f"  {name}: {latest}")
         recent = self.episodes[-max(1, min(int(limit), 12)) :]
         if recent:
@@ -135,15 +145,28 @@ class MemoryStore:
             return []
         scored: list[tuple[float, float, str, str]] = []
         for key, value in self.facts.items():
-            scored.append((_score(terms, f"{key} {value}"), 0.0, "fact", f"{key}: {value}"))
+            scored.append(
+                (_score(terms, f"{key} {value}"), 0.0, "fact", f"{key}: {value}")
+            )
         for name, person in self.people.items():
             note = person.get("notes", [])[-1]["text"] if person.get("notes") else ""
-            scored.append((_score(terms, f"{name} {note}"), 0.0, "person", f"{name}: {note}"))
+            scored.append(
+                (_score(terms, f"{name} {note}"), 0.0, "person", f"{name}: {note}")
+            )
         for name, place in self.places.items():
             note = place.get("notes", [])[-1]["text"] if place.get("notes") else ""
-            scored.append((_score(terms, f"{name} {note}"), 0.0, "place", f"{name}: {note}"))
+            scored.append(
+                (_score(terms, f"{name} {note}"), 0.0, "place", f"{name}: {note}")
+            )
         for record in self.spatial_notes:
-            scored.append((_score(terms, record.summary), record.timestamp, "spatial", record.summary))
+            scored.append(
+                (
+                    _score(terms, record.summary),
+                    record.timestamp,
+                    "spatial",
+                    record.summary,
+                )
+            )
         total = len(self.episodes)
         for index, record in enumerate(self.episodes):
             recency = (index + 1) / total if total else 0.0
@@ -208,11 +231,27 @@ class MemoryStore:
             return
         if not isinstance(raw, dict):
             return
-        self.facts = {str(key): str(value) for key, value in raw.get("facts", {}).items()} if isinstance(raw.get("facts"), dict) else {}
-        self.people = raw.get("people", {}) if isinstance(raw.get("people"), dict) else {}
-        self.places = raw.get("places", {}) if isinstance(raw.get("places"), dict) else {}
-        self.spatial_notes = [_record_from_dict(item) for item in raw.get("spatial_notes", []) if isinstance(item, dict)]
-        self.episodes = [_record_from_dict(item) for item in raw.get("episodes", []) if isinstance(item, dict)]
+        self.facts = (
+            {str(key): str(value) for key, value in raw.get("facts", {}).items()}
+            if isinstance(raw.get("facts"), dict)
+            else {}
+        )
+        self.people = (
+            raw.get("people", {}) if isinstance(raw.get("people"), dict) else {}
+        )
+        self.places = (
+            raw.get("places", {}) if isinstance(raw.get("places"), dict) else {}
+        )
+        self.spatial_notes = [
+            _record_from_dict(item)
+            for item in raw.get("spatial_notes", [])
+            if isinstance(item, dict)
+        ]
+        self.episodes = [
+            _record_from_dict(item)
+            for item in raw.get("episodes", [])
+            if isinstance(item, dict)
+        ]
         all_ids = [
             _numeric_id(record.id)
             for record in [*self.spatial_notes, *self.episodes]
@@ -229,13 +268,17 @@ class MemoryStore:
             "people": self.people,
             "places": self.places,
             "spatial_notes": [record.to_dict() for record in self.spatial_notes],
-            "episodes": [record.to_dict() for record in self.episodes[-self.max_episodes :]],
+            "episodes": [
+                record.to_dict() for record in self.episodes[-self.max_episodes :]
+            ],
         }
         tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
         tmp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         tmp_path.replace(self.path)
 
-    def _append_record(self, kind: str, summary: str, source: str, data: dict[str, Any]) -> MemoryRecord:
+    def _append_record(
+        self, kind: str, summary: str, source: str, data: dict[str, Any]
+    ) -> MemoryRecord:
         record = self._new_record(kind, summary, source, data)
         self.episodes.append(record)
         if len(self.episodes) > self.max_episodes:
@@ -243,7 +286,9 @@ class MemoryStore:
         self.flush()
         return record
 
-    def _new_record(self, kind: str, summary: str, source: str, data: dict[str, Any]) -> MemoryRecord:
+    def _new_record(
+        self, kind: str, summary: str, source: str, data: dict[str, Any]
+    ) -> MemoryRecord:
         record = MemoryRecord(
             id=f"mem-{self._next_id}",
             kind=kind,
@@ -265,7 +310,12 @@ def _named_entry(collection: dict[str, dict[str, Any]], name: str) -> dict[str, 
     if not key:
         raise ValueError("Name cannot be empty.")
     if key not in collection:
-        collection[key] = {"name": key, "notes": [], "created_at": now(), "updated_at": now()}
+        collection[key] = {
+            "name": key,
+            "notes": [],
+            "created_at": now(),
+            "updated_at": now(),
+        }
     return collection[key]
 
 
@@ -287,7 +337,9 @@ def _numeric_id(value: str) -> int | None:
 
 
 def _tokenize(text: str) -> set[str]:
-    return {tok for tok in _TOKEN_RE.findall(str(text).lower()) if tok not in _STOPWORDS}
+    return {
+        tok for tok in _TOKEN_RE.findall(str(text).lower()) if tok not in _STOPWORDS
+    }
 
 
 def _score(terms: set[str], text: str) -> float:
@@ -306,4 +358,8 @@ def _dedupe_records(records: list[MemoryRecord]) -> list[MemoryRecord]:
         if key:
             last_index[key] = index
     keep = set(last_index.values())
-    return [record for index, record in enumerate(records) if index in keep or not record.summary.strip()]
+    return [
+        record
+        for index, record in enumerate(records)
+        if index in keep or not record.summary.strip()
+    ]

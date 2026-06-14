@@ -30,13 +30,20 @@ class LeKiwiBackend(RobotBackend):
             try:
                 from lerobot.robots.lekiwi import LeKiwiClientConfig, LeKiwiClient
             except ImportError:
-                from lerobot.common.robots.lekiwi import LeKiwiClient, LeKiwiClientConfig
+                from lerobot.common.robots.lekiwi import (
+                    LeKiwiClient,
+                    LeKiwiClientConfig,
+                )
         except ImportError as exc:
             print(f"[lekiwi] LeRobot LeKiwi client is not installed: {exc}")
-            print('[lekiwi] Install LeRobot from source or with: pip install "lerobot[lekiwi]"')
+            print(
+                '[lekiwi] Install LeRobot from source or with: pip install "lerobot[lekiwi]"'
+            )
             return False
 
-        cfg = LeKiwiClientConfig(remote_ip=self._remote_ip, port=self._port, id=self._id)
+        cfg = LeKiwiClientConfig(
+            remote_ip=self._remote_ip, port=self._port, id=self._id
+        )
         self._robot = LeKiwiClient(cfg)
         if hasattr(self._robot, "connect"):
             self._robot.connect()
@@ -49,14 +56,25 @@ class LeKiwiBackend(RobotBackend):
         self.connected = False
 
     def get_state(self) -> RobotState:
-        metadata: dict[str, Any] = {"remote_ip": self._remote_ip, "port": self._port, "id": self._id}
+        metadata: dict[str, Any] = {
+            "remote_ip": self._remote_ip,
+            "port": self._port,
+            "id": self._id,
+        }
         if self._robot and hasattr(self._robot, "get_observation"):
             try:
                 obs = self._robot.get_observation()
-                metadata["observation_keys"] = sorted(obs.keys()) if isinstance(obs, dict) else str(type(obs))
+                metadata["observation_keys"] = (
+                    sorted(obs.keys()) if isinstance(obs, dict) else str(type(obs))
+                )
             except Exception as exc:
                 metadata["observation_error"] = str(exc)
-        return RobotState(backend=self.name, connected=self.connected, mode="hardware" if self.connected else "offline", metadata=metadata)
+        return RobotState(
+            backend=self.name,
+            connected=self.connected,
+            mode="hardware" if self.connected else "offline",
+            metadata=metadata,
+        )
 
     def _send_action(self, action: dict[str, Any]):
         if not self._robot or not hasattr(self._robot, "send_action"):
@@ -66,8 +84,12 @@ class LeKiwiBackend(RobotBackend):
 
     def drive(self, direction: str, distance_m: float = 0.5):
         started = now()
-        ok, message = self._send_action({"base": {"direction": direction, "distance_m": distance_m}})
-        return self._result("drive", ok, message, started, direction=direction, distance_m=distance_m)
+        ok, message = self._send_action(
+            {"base": {"direction": direction, "distance_m": distance_m}}
+        )
+        return self._result(
+            "drive", ok, message, started, direction=direction, distance_m=distance_m
+        )
 
     def rotate(self, degrees: float):
         started = now()

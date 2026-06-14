@@ -44,14 +44,21 @@ class BehaviorTreeState:
         self.goal = ""
         self.active_node_id = "wait"
         self.nodes: list[BehaviorNode] = [
-            BehaviorNode("wait", "Wait for vision, chat, language, or schedule trigger", "wait", "active")
+            BehaviorNode(
+                "wait",
+                "Wait for vision, chat, language, or schedule trigger",
+                "wait",
+                "active",
+            )
         ]
 
     def set_tree(self, goal: str, nodes: list[dict[str, Any]]):
         self.goal = str(goal).strip()
         parsed: list[BehaviorNode] = []
         for idx, raw in enumerate(nodes):
-            label = str(raw.get("label") or raw.get("name") or raw.get("id") or "").strip()
+            label = str(
+                raw.get("label") or raw.get("name") or raw.get("id") or ""
+            ).strip()
             if not label:
                 continue
             node_id = str(raw.get("id") or _slug(label) or f"node-{idx + 1}")
@@ -60,20 +67,32 @@ class BehaviorTreeState:
                     id=node_id,
                     label=label,
                     kind=str(raw.get("kind") or raw.get("type") or "action"),
-                    status=str(raw.get("status") or ("active" if not parsed else "waiting")),
+                    status=str(
+                        raw.get("status") or ("active" if not parsed else "waiting")
+                    ),
                     detail=str(raw.get("detail") or ""),
-                    children=[str(item) for item in raw.get("children", []) if str(item).strip()]
-                    if isinstance(raw.get("children"), list)
-                    else [],
+                    children=(
+                        [
+                            str(item)
+                            for item in raw.get("children", [])
+                            if str(item).strip()
+                        ]
+                        if isinstance(raw.get("children"), list)
+                        else []
+                    ),
                 )
             )
-        self.nodes = parsed or [BehaviorNode("wait", "Wait for next trigger", "wait", "active")]
+        self.nodes = parsed or [
+            BehaviorNode("wait", "Wait for next trigger", "wait", "active")
+        ]
         self.active_node_id = self.nodes[0].id
         self.last_tick_at = now()
 
     def set_waiting(self, detail: str = ""):
         self.goal = self.goal or "Maintain situational awareness"
-        self.nodes = [BehaviorNode("wait", "Wait for next trigger", "wait", "active", detail)]
+        self.nodes = [
+            BehaviorNode("wait", "Wait for next trigger", "wait", "active", detail)
+        ]
         self.active_node_id = "wait"
         self.last_tick_at = now()
 
@@ -149,7 +168,13 @@ class CronRegistry:
             name = str(raw.get("name") or f"job-{idx + 1}")
             instruction = str(raw.get("instruction") or raw.get("text") or "").strip()
             every = _positive_float(raw.get("every_seconds"), 60.0)
-            self.add(name, every, instruction, enabled=bool(raw.get("enabled", True)), job_id=str(raw.get("id") or ""))
+            self.add(
+                name,
+                every,
+                instruction,
+                enabled=bool(raw.get("enabled", True)),
+                job_id=str(raw.get("id") or ""),
+            )
 
     def add(
         self,
@@ -306,7 +331,11 @@ def _slug(value: str) -> str:
 
 def _status(value: str) -> str:
     clean = str(value).strip().lower()
-    return clean if clean in {"waiting", "active", "done", "blocked", "failed"} else "active"
+    return (
+        clean
+        if clean in {"waiting", "active", "done", "blocked", "failed"}
+        else "active"
+    )
 
 
 def _positive_float(value: Any, default: float) -> float:

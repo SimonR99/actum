@@ -31,8 +31,13 @@ def _best_onnx_providers() -> list[str]:
     """Return available ONNX execution providers, preferring GPU."""
     try:
         import onnxruntime as ort
+
         available = ort.get_available_providers()
-        providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in available]
+        providers = [
+            p
+            for p in ("CUDAExecutionProvider", "CPUExecutionProvider")
+            if p in available
+        ]
         return providers or ["CPUExecutionProvider"]
     except ImportError:
         return ["CPUExecutionProvider"]
@@ -41,7 +46,9 @@ def _best_onnx_providers() -> list[str]:
 class TTSBackend:
     sample_rate: int = 24000
 
-    def generate(self, text: str, voice: str = "af_heart", speed: float = 1.1) -> np.ndarray:
+    def generate(
+        self, text: str, voice: str = "af_heart", speed: float = 1.1
+    ) -> np.ndarray:
         raise NotImplementedError
 
 
@@ -50,11 +57,14 @@ class MLXBackend(TTSBackend):
 
     def __init__(self):
         from mlx_audio.tts.generate import load_model
+
         self._model = load_model("mlx-community/Kokoro-82M-bf16")
         self.sample_rate = self._model.sample_rate
         list(self._model.generate(text="Hello", voice="af_heart", speed=1.0))  # warmup
 
-    def generate(self, text: str, voice: str = "af_heart", speed: float = 1.1) -> np.ndarray:
+    def generate(
+        self, text: str, voice: str = "af_heart", speed: float = 1.1
+    ) -> np.ndarray:
         results = list(self._model.generate(text=text, voice=voice, speed=speed))
         return np.concatenate([np.array(r.audio) for r in results])
 
@@ -65,13 +75,16 @@ class ONNXBackend(TTSBackend):
     def __init__(self):
         import kokoro_onnx
         from huggingface_hub import hf_hub_download
+
         model_path = hf_hub_download("fastrtc/kokoro-onnx", "kokoro-v1.0.onnx")
         voices_path = hf_hub_download("fastrtc/kokoro-onnx", "voices-v1.0.bin")
         providers = _best_onnx_providers()
         # Backward compatibility: older kokoro-onnx releases don't accept
         # the providers keyword and default to their internal provider order.
         try:
-            self._model = kokoro_onnx.Kokoro(model_path, voices_path, providers=providers)
+            self._model = kokoro_onnx.Kokoro(
+                model_path, voices_path, providers=providers
+            )
             self._providers = providers
         except TypeError as exc:
             if "providers" not in str(exc):
@@ -80,7 +93,9 @@ class ONNXBackend(TTSBackend):
             self._providers = ["default"]
         self.sample_rate = 24000
 
-    def generate(self, text: str, voice: str = "af_heart", speed: float = 1.1) -> np.ndarray:
+    def generate(
+        self, text: str, voice: str = "af_heart", speed: float = 1.1
+    ) -> np.ndarray:
         pcm, _sr = self._model.create(text, voice=voice, speed=speed)
         return pcm
 

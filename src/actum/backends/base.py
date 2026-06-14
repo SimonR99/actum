@@ -44,27 +44,56 @@ class RobotBackend(ABC):
 
     def speak(self, text: str) -> ActionResult:
         started = now()
-        return self._result("speak", False, "Backend does not provide speech.", started, text=text)
+        return self._result(
+            "speak", False, "Backend does not provide speech.", started, text=text
+        )
 
     def drive(self, direction: str, distance_m: float = 0.5) -> ActionResult:
         started = now()
-        return self._result("drive", False, "Backend does not provide locomotion.", started, direction=direction, distance_m=distance_m)
+        return self._result(
+            "drive",
+            False,
+            "Backend does not provide locomotion.",
+            started,
+            direction=direction,
+            distance_m=distance_m,
+        )
 
     def rotate(self, degrees: float) -> ActionResult:
         started = now()
-        return self._result("rotate", False, "Backend does not provide rotation.", started, degrees=degrees)
+        return self._result(
+            "rotate",
+            False,
+            "Backend does not provide rotation.",
+            started,
+            degrees=degrees,
+        )
 
     def gripper(self, action: str) -> ActionResult:
         started = now()
-        return self._result("gripper", False, "Backend does not provide a gripper.", started, gripper_action=action)
+        return self._result(
+            "gripper",
+            False,
+            "Backend does not provide a gripper.",
+            started,
+            gripper_action=action,
+        )
 
     def gesture(self, name: str) -> ActionResult:
         started = now()
-        return self._result("gesture", False, "Backend does not provide gestures.", started, gesture=name)
+        return self._result(
+            "gesture",
+            False,
+            "Backend does not provide gestures.",
+            started,
+            gesture=name,
+        )
 
     def set_led(self, r: int, g: int, b: int) -> ActionResult:
         started = now()
-        return self._result("set_led", False, "Backend does not provide LEDs.", started, r=r, g=g, b=b)
+        return self._result(
+            "set_led", False, "Backend does not provide LEDs.", started, r=r, g=g, b=b
+        )
 
     def stop(self) -> ActionResult:
         started = now()

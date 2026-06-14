@@ -15,7 +15,11 @@ from actum.backends.ros2 import ROS2Backend
 def create_backend(config: dict[str, Any]) -> RobotBackend:
     robot_cfg = config.get("robot", {}) if isinstance(config.get("robot"), dict) else {}
     backend_name = str(robot_cfg.get("backend") or "laptop").lower().strip()
-    backend_cfg = robot_cfg.get(backend_name, {}) if isinstance(robot_cfg.get(backend_name), dict) else {}
+    backend_cfg = (
+        robot_cfg.get(backend_name, {})
+        if isinstance(robot_cfg.get(backend_name), dict)
+        else {}
+    )
 
     if backend_name in {"laptop", "local", "companion"}:
         return LaptopBackend(backend_cfg)

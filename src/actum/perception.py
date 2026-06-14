@@ -25,7 +25,6 @@ from typing import Callable
 
 import numpy as np
 
-
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 SAMPLE_RATE = 16000
@@ -44,6 +43,7 @@ _CSI_PIPELINE = (
 
 # ── Platform helpers ───────────────────────────────────────────────────────────
 
+
 def _is_jetson() -> bool:
     return platform.machine() == "aarch64" and Path("/etc/nv_tegra_release").exists()
 
@@ -55,14 +55,15 @@ def _env(name: str, default: str | None = None) -> str | None:
 
 def _configure_alsa_default():
     """Configures ALSA default PCM to route through the plug plugin or PulseAudio.
-    
+
     This enables automatic sample rate conversion and/or host-desktop sound sharing,
     preventing PortAudio / sounddevice / aplay errors when playing/capturing audio.
     """
     import re
+
     if os.name != "posix" or os.environ.get("ACTUM_AUDIO_DEVICE_CONFIGURED"):
         return
-    
+
     # Check if we are using containerized PulseAudio
     pulse_socket = os.environ.get("PULSE_SERVER", "")
     if pulse_socket.startswith("unix:"):
@@ -79,7 +80,9 @@ def _configure_alsa_default():
             try:
                 with open("/etc/asound.conf", "w") as f:
                     f.write(asound_content)
-                print(f"[audio] Configured ALSA default PCM -> PulseAudio routing via {pulse_socket}")
+                print(
+                    f"[audio] Configured ALSA default PCM -> PulseAudio routing via {pulse_socket}"
+                )
                 os.environ["ACTUM_AUDIO_DEVICE_CONFIGURED"] = "1"
                 os.environ["ACTUM_AUDIO_DEVICE"] = "default"
                 return
@@ -90,7 +93,7 @@ def _configure_alsa_default():
     audio_device = os.environ.get("ACTUM_AUDIO_DEVICE", "")
     if not audio_device:
         return
-        
+
     match = re.match(r"^(?:plug)?hw:(\d+)(?:,(\d+))?$", audio_device)
     if match:
         card = match.group(1)
@@ -98,7 +101,7 @@ def _configure_alsa_default():
         asound_content = (
             f"pcm.!default {{\n"
             f"    type plug\n"
-            f"    slave.pcm \"hw:{card},{device}\"\n"
+            f'    slave.pcm "hw:{card},{device}"\n'
             f"}}\n"
             f"ctl.!default {{\n"
             f"    type hw\n"
@@ -108,7 +111,9 @@ def _configure_alsa_default():
         try:
             with open("/etc/asound.conf", "w") as f:
                 f.write(asound_content)
-            print(f"[audio] Configured ALSA default PCM -> hw:{card},{device} with plug rate converter")
+            print(
+                f"[audio] Configured ALSA default PCM -> hw:{card},{device} with plug rate converter"
+            )
             os.environ["ACTUM_AUDIO_DEVICE_CONFIGURED"] = "1"
             os.environ["ACTUM_AUDIO_DEVICE"] = "default"
         except Exception as e:
@@ -119,6 +124,7 @@ _configure_alsa_default()
 
 
 # ── Camera ─────────────────────────────────────────────────────────────────────
+
 
 def open_camera(source: str | int | None = None):
     """Open a camera and return a cv2.VideoCapture object, or None on failure.
@@ -173,12 +179,15 @@ def open_camera(source: str | int | None = None):
     return None
 
 
-def capture_jpeg(cam, width: int = 320, quality: int = 70, drain_frames: int | None = None) -> str | None:
+def capture_jpeg(
+    cam, width: int = 320, quality: int = 70, drain_frames: int | None = None
+) -> str | None:
     """Read one frame and return as base64-encoded JPEG, or None."""
     if cam is None:
         return None
     try:
         import cv2
+
         if drain_frames is None:
             drain_frames = _env_int("ACTUM_CAMERA_DRAIN_FRAMES", 1, 0, 5)
         for _ in range(max(0, drain_frames)):
@@ -200,6 +209,7 @@ def _configure_low_latency_camera(cam):
     """Ask OpenCV backends to avoid accumulating stale frames."""
     try:
         import cv2
+
         cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     except Exception:
         pass
@@ -217,6 +227,7 @@ def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
 
 
 # ── VAD ────────────────────────────────────────────────────────────────────────
+
 
 class EnergyVAD:
     """Adaptive RMS energy-based voice activity detector.
@@ -238,9 +249,9 @@ class EnergyVAD:
         silence_ratio: float = 1.3,
         noise_floor_init: float = 0.030,  # safe starting estimate
         noise_floor_alpha: float = 0.005,  # EMA adaptation speed (~6 s to converge)
-        min_speech_chunks: int = 10,       # ~300 ms
-        silence_chunks: int = 25,          # ~750 ms
-        pre_roll_chunks: int = 5,          # ~150 ms pre-speech padding
+        min_speech_chunks: int = 10,  # ~300 ms
+        silence_chunks: int = 25,  # ~750 ms
+        pre_roll_chunks: int = 5,  # ~150 ms pre-speech padding
     ):
         self.speech_ratio = speech_ratio
         self.silence_ratio = silence_ratio
@@ -264,7 +275,7 @@ class EnergyVAD:
 
     def process(self, chunk: np.ndarray) -> np.ndarray | None:
         """Feed one audio chunk. Returns complete utterance PCM when speech ends."""
-        rms = float(np.sqrt(np.mean(chunk ** 2)))
+        rms = float(np.sqrt(np.mean(chunk**2)))
 
         speech_thr = self._noise_floor * self.speech_ratio
         silence_thr = self._noise_floor * self.silence_ratio
@@ -279,9 +290,8 @@ class EnergyVAD:
         if not self._in_speech:
             # Adapt noise floor only while not capturing speech
             self._noise_floor = (
-                (1 - self.noise_floor_alpha) * self._noise_floor
-                + self.noise_floor_alpha * rms
-            )
+                1 - self.noise_floor_alpha
+            ) * self._noise_floor + self.noise_floor_alpha * rms
             self._pre_roll.append(chunk)
             if len(self._pre_roll) > self.pre_roll_chunks:
                 self._pre_roll.pop(0)
@@ -312,6 +322,7 @@ class EnergyVAD:
 
 
 # ── Microphone capture ─────────────────────────────────────────────────────────
+
 
 class AudioCapture:
     """Continuous microphone capture with VAD. Runs in a background thread.
@@ -366,7 +377,9 @@ class AudioCapture:
 
         device = _env("ACTUM_AUDIO_DEVICE") or None
         selected_rate = self._sample_rate
-        print(f"[mic] listening (device={device or 'default'}, requested {selected_rate} Hz)…")
+        print(
+            f"[mic] listening (device={device or 'default'}, requested {selected_rate} Hz)…"
+        )
 
         def _run_stream(sample_rate: int):
             chunk_frames = int(sample_rate * CHUNK_MS / 1000)
@@ -395,7 +408,11 @@ class AudioCapture:
                 return
 
             try:
-                info = sd.query_devices(device, "input") if device is not None else sd.query_devices(sd.default.device[0], "input")
+                info = (
+                    sd.query_devices(device, "input")
+                    if device is not None
+                    else sd.query_devices(sd.default.device[0], "input")
+                )
                 fallback_rate = int(info["default_samplerate"])
             except Exception as qerr:
                 print(f"[mic] error: {e} (and fallback lookup failed: {qerr})")
@@ -427,6 +444,7 @@ def _audio_input_setup_hint(error: Exception) -> str:
 
 
 # ── Audio helpers ──────────────────────────────────────────────────────────────
+
 
 def pcm_to_wav_b64(pcm: np.ndarray, sample_rate: int) -> str:
     """Convert float32 PCM to base64-encoded WAV (no external deps)."""

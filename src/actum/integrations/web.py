@@ -33,7 +33,9 @@ class _TextExtractor(HTMLParser):
         return "\n".join(self.parts)
 
 
-def fetch_text(url: str, timeout_s: float = 10.0, max_chars: int = 6000) -> dict[str, Any]:
+def fetch_text(
+    url: str, timeout_s: float = 10.0, max_chars: int = 6000
+) -> dict[str, Any]:
     """Fetch a web page and return readable text.
 
     This is intentionally modest: it supports direct HTTP(S) fetches for the

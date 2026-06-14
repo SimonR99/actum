@@ -7,7 +7,12 @@ from typing import Any
 
 from actum.backends.base import RobotBackend
 from actum.backends.factory import create_backend
-from actum.core.autonomy import BehaviorTreeState, BodyPerception, CronRegistry, SpatialMap
+from actum.core.autonomy import (
+    BehaviorTreeState,
+    BodyPerception,
+    CronRegistry,
+    SpatialMap,
+)
 from actum.core.capabilities import default_capabilities
 from actum.core.companion import CompanionDecision, CompanionPolicy
 from actum.core.events import EventLog
@@ -36,15 +41,31 @@ class RobotRuntime:
         config.setdefault("models", {})["active_provider"] = profile["provider"]
 
         self.settings = RuntimeSettings(config, capability_names)
-        self.personality = config.get("personality", {}) if isinstance(config.get("personality"), dict) else {}
-        self.companion = CompanionPolicy(config.get("companion", {}) if isinstance(config.get("companion"), dict) else {})
-        self.memory = MemoryStore(config.get("memory", {}) if isinstance(config.get("memory"), dict) else {})
+        self.personality = (
+            config.get("personality", {})
+            if isinstance(config.get("personality"), dict)
+            else {}
+        )
+        self.companion = CompanionPolicy(
+            config.get("companion", {})
+            if isinstance(config.get("companion"), dict)
+            else {}
+        )
+        self.memory = MemoryStore(
+            config.get("memory", {}) if isinstance(config.get("memory"), dict) else {}
+        )
         self._last_consolidate_at = now()
-        behavior_cfg = dict(config.get("behavior_loop", {}) if isinstance(config.get("behavior_loop"), dict) else {})
+        behavior_cfg = dict(
+            config.get("behavior_loop", {})
+            if isinstance(config.get("behavior_loop"), dict)
+            else {}
+        )
         behavior_cfg["tick_seconds"] = profile["tick_seconds"]
         behavior_cfg["idle_review_seconds"] = profile["idle_review_seconds"]
         self.behavior = BehaviorTreeState(behavior_cfg)
-        cron_cfg = config.get("cron", []) if isinstance(config.get("cron"), list) else []
+        cron_cfg = (
+            config.get("cron", []) if isinstance(config.get("cron"), list) else []
+        )
         self.cron = CronRegistry(cron_cfg)
         self.spatial_map = SpatialMap()
         self.body = BodyPerception()
@@ -54,7 +75,11 @@ class RobotRuntime:
 
     def connect(self) -> bool:
         ok = self.backend.connect()
-        self.events.append("backend.connected" if ok else "backend.unavailable", self.backend.name, backend=self.backend.name)
+        self.events.append(
+            "backend.connected" if ok else "backend.unavailable",
+            self.backend.name,
+            backend=self.backend.name,
+        )
         return ok
 
     def close(self):
@@ -78,8 +103,16 @@ class RobotRuntime:
             connected = self.backend.connect()
         except Exception as exc:
             connected = False
-            self.events.append("backend.unavailable", self.backend.name, backend=self.backend.name, error=str(exc))
-            return False, f"Robot backend changed to {self.backend.name}, but connection failed: {exc}"
+            self.events.append(
+                "backend.unavailable",
+                self.backend.name,
+                backend=self.backend.name,
+                error=str(exc),
+            )
+            return (
+                False,
+                f"Robot backend changed to {self.backend.name}, but connection failed: {exc}",
+            )
 
         self.events.append(
             "backend.reconfigured",
@@ -90,15 +123,31 @@ class RobotRuntime:
         )
         if connected:
             return True, f"Robot backend changed to {self.backend.name}."
-        return False, f"Robot backend changed to {self.backend.name}, but it is not connected."
+        return (
+            False,
+            f"Robot backend changed to {self.backend.name}, but it is not connected.",
+        )
 
     def set_plan(self, goal: str, plan_text: str):
         self.intent.set_plan(goal, plan_text)
         self.behavior.set_tree(
             goal,
-            [{"id": step.id, "label": step.label, "kind": "plan_step", "status": step.status} for step in self.intent.steps],
+            [
+                {
+                    "id": step.id,
+                    "label": step.label,
+                    "kind": "plan_step",
+                    "status": step.status,
+                }
+                for step in self.intent.steps
+            ],
         )
-        self.events.append("intent.plan", "agent", goal=goal, steps=[step.to_dict() for step in self.intent.steps])
+        self.events.append(
+            "intent.plan",
+            "agent",
+            goal=goal,
+            steps=[step.to_dict() for step in self.intent.steps],
+        )
 
     def mark_step(self, label_or_id: str):
         self.intent.mark_active(label_or_id)
@@ -121,11 +170,17 @@ class RobotRuntime:
 
     def set_behavior_tree(self, goal: str, nodes: list[dict[str, Any]]):
         self.behavior.set_tree(goal, nodes)
-        self.events.append("behavior.tree", "agent", goal=goal, nodes=self.behavior.to_dict()["nodes"])
+        self.events.append(
+            "behavior.tree", "agent", goal=goal, nodes=self.behavior.to_dict()["nodes"]
+        )
 
-    def mark_behavior_node(self, node_id: str, status: str = "active", detail: str = "") -> bool:
+    def mark_behavior_node(
+        self, node_id: str, status: str = "active", detail: str = ""
+    ) -> bool:
         ok = self.behavior.mark_node(node_id, status, detail)
-        self.events.append("behavior.node", "agent", node=node_id, status=status, detail=detail, ok=ok)
+        self.events.append(
+            "behavior.node", "agent", node=node_id, status=status, detail=detail, ok=ok
+        )
         return ok
 
     @property
@@ -152,7 +207,12 @@ class RobotRuntime:
         self.behavior.tick_seconds = float(profile["tick_seconds"])
         self.behavior.idle_review_seconds = float(profile["idle_review_seconds"])
         self.config["active_profile"] = self.profiles.active_name
-        self.events.append("profile.active", "operator", profile=self.profiles.active_name, resolved=profile)
+        self.events.append(
+            "profile.active",
+            "operator",
+            profile=self.profiles.active_name,
+            resolved=profile,
+        )
         provider = str(profile["provider"]).lower()
         self.settings.models["active_provider"] = provider
         note = f"Profile set to {self.profiles.active_name}."
@@ -189,7 +249,9 @@ class RobotRuntime:
             self.events.append("memory.consolidated", "runtime", report=report)
         return report
 
-    def add_cron_job(self, name: str, every_seconds: float, instruction: str) -> dict[str, Any]:
+    def add_cron_job(
+        self, name: str, every_seconds: float, instruction: str
+    ) -> dict[str, Any]:
         job = self.cron.add(name, every_seconds, instruction)
         self.events.append("cron.add", "operator", job=job.to_dict())
         return job.to_dict()
@@ -215,17 +277,23 @@ class RobotRuntime:
         contacts: list[str] | None = None,
         joints: dict[str, float] | None = None,
     ):
-        self.body.update(summary, posture=posture, holding=holding, contacts=contacts, joints=joints)
+        self.body.update(
+            summary, posture=posture, holding=holding, contacts=contacts, joints=joints
+        )
         self.events.append("body.perception", "agent", body=self.body.to_dict())
 
-    def record_tool(self, action: dict[str, Any], result: ActionResult | None = None) -> str:
+    def record_tool(
+        self, action: dict[str, Any], result: ActionResult | None = None
+    ) -> str:
         node_id = action.get("_node_id")
         if node_id:
             for node in self.tool_graph:
                 if node["id"] == node_id:
                     if result:
                         node["result"] = result.to_dict()
-                        self.events.append("tool.result", "tool", tool=node["type"], node=node)
+                        self.events.append(
+                            "tool.result", "tool", tool=node["type"], node=node
+                        )
                     return node_id
 
         node_id = f"tool-{len(self.tool_graph) + 1}"
@@ -237,7 +305,12 @@ class RobotRuntime:
             "result": result.to_dict() if result else None,
         }
         self.tool_graph.append(node)
-        self.events.append("tool.result" if result else "tool.call", "tool", tool=node["type"], node=node)
+        self.events.append(
+            "tool.result" if result else "tool.call",
+            "tool",
+            tool=node["type"],
+            node=node,
+        )
         return node_id
 
     def should_process_event(self, event: dict[str, Any]) -> CompanionDecision:
@@ -276,7 +349,15 @@ def _public_personality(robot_name: str, personality: dict[str, Any]) -> dict[st
     return {
         "name": str(personality.get("name") or robot_name),
         "persona": str(personality.get("persona", "")),
-        "likes": list(personality.get("likes", [])) if isinstance(personality.get("likes"), list) else [],
-        "principles": list(personality.get("principles", [])) if isinstance(personality.get("principles"), list) else [],
+        "likes": (
+            list(personality.get("likes", []))
+            if isinstance(personality.get("likes"), list)
+            else []
+        ),
+        "principles": (
+            list(personality.get("principles", []))
+            if isinstance(personality.get("principles"), list)
+            else []
+        ),
         "speaking_style": str(personality.get("speaking_style", "")),
     }

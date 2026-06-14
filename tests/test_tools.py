@@ -56,7 +56,10 @@ def test_set_plan_updates_runtime_intent():
 
 def test_remember_writes_to_runtime_memory(tmp_path):
     runtime = RobotRuntime(
-        {"robot": {"backend": "fake"}, "memory": {"path": str(tmp_path / "memory.json")}},
+        {
+            "robot": {"backend": "fake"},
+            "memory": {"path": str(tmp_path / "memory.json")},
+        },
         "testbot",
     )
     agent = FakeAgent(runtime)
@@ -71,7 +74,10 @@ def test_remember_writes_to_runtime_memory(tmp_path):
 
 def test_memory_observation_tools_record_structured_entries(tmp_path):
     runtime = RobotRuntime(
-        {"robot": {"backend": "fake"}, "memory": {"path": str(tmp_path / "memory.json")}},
+        {
+            "robot": {"backend": "fake"},
+            "memory": {"path": str(tmp_path / "memory.json")},
+        },
         "testbot",
     )
     tools = RobotTools(FakeAgent(runtime))
@@ -87,7 +93,10 @@ def test_memory_observation_tools_record_structured_entries(tmp_path):
 
 def test_behavior_map_body_and_cron_tools_update_runtime(tmp_path):
     runtime = RobotRuntime(
-        {"robot": {"backend": "fake"}, "memory": {"path": str(tmp_path / "memory.json")}},
+        {
+            "robot": {"backend": "fake"},
+            "memory": {"path": str(tmp_path / "memory.json")},
+        },
         "testbot",
     )
     tools = RobotTools(FakeAgent(runtime))
@@ -97,8 +106,12 @@ def test_behavior_map_body_and_cron_tools_update_runtime(tmp_path):
         '[{"id":"wait","label":"Wait for trigger","kind":"wait"},{"id":"look","label":"Review camera","kind":"vision"}]',
     )
     node = tools.mark_behavior_node("look", "active", "camera review")
-    mapped = tools.record_map_observation("Desk is in front of the dock.", "desk", confidence=0.9)
-    body = tools.update_body_perception("Arm is clear.", posture="ready", contacts="left foot,right foot")
+    mapped = tools.record_map_observation(
+        "Desk is in front of the dock.", "desk", confidence=0.9
+    )
+    body = tools.update_body_perception(
+        "Arm is clear.", posture="ready", contacts="left foot,right foot"
+    )
     cron = tools.schedule_job("room check", 120, "Review the room.")
 
     assert "2 node" in behavior
@@ -124,7 +137,9 @@ def test_web_fetch_rejects_non_http_urls():
 
 
 def test_list_mcp_servers_reports_disabled_config():
-    runtime = RobotRuntime({"robot": {"backend": "fake"}, "mcp": {"enabled": False}}, "testbot")
+    runtime = RobotRuntime(
+        {"robot": {"backend": "fake"}, "mcp": {"enabled": False}}, "testbot"
+    )
     tools = RobotTools(FakeAgent(runtime, runtime.config))
 
     result = tools.list_mcp_servers()
@@ -135,7 +150,10 @@ def test_list_mcp_servers_reports_disabled_config():
 
 
 def test_get_tools_respects_runtime_tool_settings():
-    runtime = RobotRuntime({"robot": {"backend": "fake"}, "tools": {"enabled": ["done", "look"]}}, "testbot")
+    runtime = RobotRuntime(
+        {"robot": {"backend": "fake"}, "tools": {"enabled": ["done", "look"]}},
+        "testbot",
+    )
     tools = RobotTools(FakeAgent(runtime))
 
     names = {tool.__name__ for tool in tools.get_tools()}

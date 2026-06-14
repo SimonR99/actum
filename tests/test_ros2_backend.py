@@ -13,6 +13,7 @@ class FakeTwist:
                 self.x = 0.0
                 self.y = 0.0
                 self.z = 0.0
+
         self.linear = Vector3()
         self.angular = Vector3()
 
@@ -33,15 +34,19 @@ class FakeOdometry:
                                 self.x = 1.0
                                 self.y = 2.0
                                 self.z = 0.0
+
                         class Quaternion:
                             def __init__(self):
                                 self.x = 0.0
                                 self.y = 0.0
                                 self.z = 0.0
                                 self.w = 1.0
+
                         self.position = Point()
                         self.orientation = Quaternion()
+
                 self.pose = PoseWithCovariance()
+
         self.pose = Pose()
 
 
@@ -65,7 +70,9 @@ def mock_ros2(monkeypatch):
 
     # Mock python modules
     sys.modules["rclpy"] = mock_rclpy
-    sys.modules["rclpy.executors"] = types.SimpleNamespace(SingleThreadedExecutor=mock_rclpy.executors.SingleThreadedExecutor)
+    sys.modules["rclpy.executors"] = types.SimpleNamespace(
+        SingleThreadedExecutor=mock_rclpy.executors.SingleThreadedExecutor
+    )
     sys.modules["geometry_msgs"] = types.SimpleNamespace()
     sys.modules["geometry_msgs.msg"] = types.SimpleNamespace(Twist=FakeTwist)
     sys.modules["nav_msgs"] = types.SimpleNamespace()
@@ -82,7 +89,18 @@ def mock_ros2(monkeypatch):
     }
 
     # Clean up sys.modules
-    for mod in ["rclpy", "rclpy.executors", "geometry_msgs", "geometry_msgs.msg", "nav_msgs", "nav_msgs.msg", "sensor_msgs", "sensor_msgs.msg", "std_msgs", "std_msgs.msg"]:
+    for mod in [
+        "rclpy",
+        "rclpy.executors",
+        "geometry_msgs",
+        "geometry_msgs.msg",
+        "nav_msgs",
+        "nav_msgs.msg",
+        "sensor_msgs",
+        "sensor_msgs.msg",
+        "std_msgs",
+        "std_msgs.msg",
+    ]:
         sys.modules.pop(mod, None)
 
 
@@ -107,11 +125,13 @@ def test_ros2_backend_config_defaults():
 
 
 def test_ros2_backend_connect_and_disconnect(mock_ros2):
-    backend = ROS2Backend({
-        "node_name": "test_actum_node",
-        "cmd_vel_topic": "/cmd_vel_test",
-    })
-    
+    backend = ROS2Backend(
+        {
+            "node_name": "test_actum_node",
+            "cmd_vel_topic": "/cmd_vel_test",
+        }
+    )
+
     assert backend.connected is False
     assert backend.connect() is True
     assert backend.connected is True
@@ -163,7 +183,7 @@ def test_ros2_backend_callbacks(mock_ros2):
 
 def test_ros2_backend_drive(mock_ros2, monkeypatch):
     monkeypatch.setattr("actum.backends.ros2.time.sleep", lambda _x: None)
-    
+
     backend = ROS2Backend()
     assert backend.connect() is True
 
@@ -184,7 +204,7 @@ def test_ros2_backend_drive(mock_ros2, monkeypatch):
 
 def test_ros2_backend_rotate(mock_ros2, monkeypatch):
     monkeypatch.setattr("actum.backends.ros2.time.sleep", lambda _x: None)
-    
+
     backend = ROS2Backend()
     assert backend.connect() is True
 

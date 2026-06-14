@@ -86,7 +86,10 @@ def build_tool_schema(func: Callable[..., Any]) -> dict[str, Any]:
 def _json_type(annotation: Any) -> str:
     base = annotation
     # Unwrap Optional/Union (e.g. ``float | None``) to its first non-None member.
-    if isinstance(annotation, types.UnionType) or typing.get_origin(annotation) is typing.Union:
+    if (
+        isinstance(annotation, types.UnionType)
+        or typing.get_origin(annotation) is typing.Union
+    ):
         members = [arg for arg in typing.get_args(annotation) if arg is not type(None)]
         base = members[0] if members else str
     if base is bool:

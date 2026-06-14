@@ -50,7 +50,9 @@ def _wav_b64_to_16k_mono(audio_b64: str):
     elif width == 4:
         audio = np.frombuffer(frames, dtype=np.int32).astype(np.float32) / 2147483648.0
     elif width == 1:
-        audio = (np.frombuffer(frames, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
+        audio = (
+            np.frombuffer(frames, dtype=np.uint8).astype(np.float32) - 128.0
+        ) / 128.0
     else:
         raise ValueError(f"unsupported WAV sample width: {width} bytes")
 
@@ -64,7 +66,9 @@ def _wav_b64_to_16k_mono(audio_b64: str):
             from scipy.signal import resample_poly
 
             g = gcd(int(sample_rate), WHISPER_SAMPLE_RATE)
-            audio = resample_poly(audio, WHISPER_SAMPLE_RATE // g, int(sample_rate) // g)
+            audio = resample_poly(
+                audio, WHISPER_SAMPLE_RATE // g, int(sample_rate) // g
+            )
         except Exception:
             # Linear-interpolation fallback (no scipy, or unusual rate).
             target_len = int(round(audio.size * WHISPER_SAMPLE_RATE / sample_rate))
@@ -106,8 +110,12 @@ class WhisperSTT(STTEngine):
         if self._model is None:
             from faster_whisper import WhisperModel
 
-            print(f"[stt] loading local Whisper model '{self._model_size}' (first run downloads it)…")
-            self._model = WhisperModel(self._model_size, device=self._device, compute_type=self._compute_type)
+            print(
+                f"[stt] loading local Whisper model '{self._model_size}' (first run downloads it)…"
+            )
+            self._model = WhisperModel(
+                self._model_size, device=self._device, compute_type=self._compute_type
+            )
             print("[stt] Whisper model ready.")
         return self._model
 
@@ -157,7 +165,12 @@ class OpenAISTT(STTEngine):
 
     name = "openai"
 
-    def __init__(self, model: str = DEFAULT_OPENAI_TRANSCRIBE_MODEL, api_key: str = "", language: str = ""):
+    def __init__(
+        self,
+        model: str = DEFAULT_OPENAI_TRANSCRIBE_MODEL,
+        api_key: str = "",
+        language: str = "",
+    ):
         self._model = model or DEFAULT_OPENAI_TRANSCRIBE_MODEL
         self._api_key = api_key
         self._language = (language or "").strip() or None
@@ -178,7 +191,9 @@ class OpenAISTT(STTEngine):
             kwargs = {}
             if self._language:
                 kwargs["language"] = self._language
-            result = client.audio.transcriptions.create(model=self._model, file=buffer, **kwargs)
+            result = client.audio.transcriptions.create(
+                model=self._model, file=buffer, **kwargs
+            )
             return (getattr(result, "text", "") or "").strip()
         except Exception as exc:
             print(f"[stt] openai transcription failed: {exc}")
@@ -206,7 +221,9 @@ def build_stt(settings: Any) -> STTEngine | None:
         models = settings.to_config(include_secrets=True)["models"]
         api_key = resolve_api_key(models.get("providers", {}).get("openai", {}))
         return OpenAISTT(
-            model=str(speech.get("openai_transcribe_model", DEFAULT_OPENAI_TRANSCRIBE_MODEL)),
+            model=str(
+                speech.get("openai_transcribe_model", DEFAULT_OPENAI_TRANSCRIBE_MODEL)
+            ),
             api_key=api_key,
             language=lang,
         )

@@ -6,7 +6,6 @@ import os
 from copy import deepcopy
 from typing import Any
 
-
 DEFAULT_PROVIDER_ENVS = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
@@ -25,10 +24,14 @@ class RuntimeSettings:
     def __init__(self, config: dict[str, Any], capability_names: list[str]):
         self._capability_names = list(capability_names)
         self.models = _default_models()
-        raw_models = config.get("models", {}) if isinstance(config.get("models"), dict) else {}
+        raw_models = (
+            config.get("models", {}) if isinstance(config.get("models"), dict) else {}
+        )
         self.models = _merge_dict(self.models, raw_models)
 
-        raw_tools = config.get("tools", {}) if isinstance(config.get("tools"), dict) else {}
+        raw_tools = (
+            config.get("tools", {}) if isinstance(config.get("tools"), dict) else {}
+        )
         configured = raw_tools.get("enabled")
         if isinstance(configured, list) and configured:
             self.enabled_tools = {str(item) for item in configured}
@@ -39,12 +42,16 @@ class RuntimeSettings:
             self.enabled_tools.difference_update(str(item) for item in disabled)
 
         for provider, env_name in DEFAULT_PROVIDER_ENVS.items():
-            provider_cfg = self.models.setdefault("providers", {}).setdefault(provider, {})
+            provider_cfg = self.models.setdefault("providers", {}).setdefault(
+                provider, {}
+            )
             provider_cfg.setdefault("api_key_env", env_name)
             if os.environ.get(str(provider_cfg["api_key_env"])):
                 provider_cfg["api_key_configured"] = True
 
-        raw_speech = config.get("speech", {}) if isinstance(config.get("speech"), dict) else {}
+        raw_speech = (
+            config.get("speech", {}) if isinstance(config.get("speech"), dict) else {}
+        )
         self.speech = {**DEFAULT_SPEECH, **raw_speech}
         if str(self.speech.get("stt_engine")) not in STT_ENGINES:
             self.speech["stt_engine"] = DEFAULT_SPEECH["stt_engine"]
@@ -67,7 +74,11 @@ class RuntimeSettings:
         if enabled is not None:
             cfg["enabled"] = bool(enabled)
         if api_key:
-            env_name = str(cfg.get("api_key_env") or DEFAULT_PROVIDER_ENVS.get(name) or f"{name.upper()}_API_KEY")
+            env_name = str(
+                cfg.get("api_key_env")
+                or DEFAULT_PROVIDER_ENVS.get(name)
+                or f"{name.upper()}_API_KEY"
+            )
             cfg["api_key_env"] = env_name
             cfg["api_key_configured"] = True
             cfg["_api_key"] = api_key
@@ -78,7 +89,9 @@ class RuntimeSettings:
     def set_stt_engine(self, engine: str) -> dict[str, Any]:
         name = str(engine).strip().lower()
         if name not in STT_ENGINES:
-            raise ValueError(f"Unknown STT engine {engine!r}. Choose one of: {', '.join(STT_ENGINES)}")
+            raise ValueError(
+                f"Unknown STT engine {engine!r}. Choose one of: {', '.join(STT_ENGINES)}"
+            )
         self.speech["stt_engine"] = name
         return dict(self.speech)
 
@@ -100,7 +113,10 @@ class RuntimeSettings:
             cfg.pop("_api_key", None)
             cfg.pop("api_key", None)
             env_name = cfg.get("api_key_env")
-            cfg["api_key_configured"] = bool(cfg.get("api_key_configured") or (env_name and os.environ.get(str(env_name))))
+            cfg["api_key_configured"] = bool(
+                cfg.get("api_key_configured")
+                or (env_name and os.environ.get(str(env_name)))
+            )
         return {
             "language": self.language,
             "models": models,
@@ -117,7 +133,9 @@ class RuntimeSettings:
             for provider, cfg in self.models.get("providers", {}).items():
                 secret = cfg.get("_api_key")
                 if secret:
-                    settings["models"]["providers"].setdefault(provider, {})["api_key"] = secret
+                    settings["models"]["providers"].setdefault(provider, {})[
+                        "api_key"
+                    ] = secret
         return settings
 
 

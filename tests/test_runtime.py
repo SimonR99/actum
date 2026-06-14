@@ -29,9 +29,15 @@ def test_runtime_records_cron_map_body_and_settings():
     runtime = RobotRuntime({"robot": {"backend": "fake"}}, "testbot")
 
     job = runtime.add_cron_job("look around", 30, "Check the room.")
-    obs = runtime.record_map_observation("Dock is beside the desk.", place="desk", confidence=0.8)
-    runtime.update_body_perception("Standing with empty hands.", posture="standing", holding="nothing")
-    runtime.settings.set_model_provider("openai", model="example-model", api_key="test-key", enabled=True)
+    obs = runtime.record_map_observation(
+        "Dock is beside the desk.", place="desk", confidence=0.8
+    )
+    runtime.update_body_perception(
+        "Standing with empty hands.", posture="standing", holding="nothing"
+    )
+    runtime.settings.set_model_provider(
+        "openai", model="example-model", api_key="test-key", enabled=True
+    )
     runtime.settings.set_tool_enabled("navigate", False)
 
     snapshot = runtime.snapshot()
@@ -42,6 +48,9 @@ def test_runtime_records_cron_map_body_and_settings():
     assert snapshot["map"]["observations"][0]["summary"] == "Dock is beside the desk."
     assert snapshot["body"]["summary"] == "Standing with empty hands."
     assert snapshot["settings"]["models"]["active_provider"] == "openai"
-    assert snapshot["settings"]["models"]["providers"]["openai"]["api_key_configured"] is True
+    assert (
+        snapshot["settings"]["models"]["providers"]["openai"]["api_key_configured"]
+        is True
+    )
     assert "api_key" not in snapshot["settings"]["models"]["providers"]["openai"]
     assert "navigate" not in snapshot["settings"]["tools"]["enabled"]

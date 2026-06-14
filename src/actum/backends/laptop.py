@@ -51,8 +51,16 @@ class LaptopBackend(RobotBackend):
     def speak(self, text: str):
         started = now()
         if not self.speaker_enabled:
-            return self._result("speak", False, "Laptop speaker output is disabled.", started, text=text)
-        return self._result("speak", True, "Speech will play through the local TTS pipeline.", started, text=text)
+            return self._result(
+                "speak", False, "Laptop speaker output is disabled.", started, text=text
+            )
+        return self._result(
+            "speak",
+            True,
+            "Speech will play through the local TTS pipeline.",
+            started,
+            text=text,
+        )
 
     def drive(self, direction: str, distance_m: float = 0.5):
         started = now()

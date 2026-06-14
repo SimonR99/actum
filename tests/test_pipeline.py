@@ -90,7 +90,9 @@ def test_full_turn_chains_tools_through_backend(agent):
 
     agent._speak = fake_speak
 
-    actions = asyncio.run(agent.process_event({"source": "chat", "text": "say hi and step closer"}))
+    actions = asyncio.run(
+        agent.process_event({"source": "chat", "text": "say hi and step closer"})
+    )
 
     types = [a["type"] for a in actions]
     assert types == ["plan", "step", "navigate", "speak", "done"]
@@ -125,9 +127,14 @@ def test_vision_turn_updates_scene_summary(agent):
         return ""
 
     agent.install_provider(ScriptedProvider([review]))
-    asyncio.run(agent.process_event({"source": "vision", "importance": 0.9, "force": True}))
+    asyncio.run(
+        agent.process_event({"source": "vision", "importance": 0.9, "force": True})
+    )
 
-    assert agent.runtime.scene["summary"] == "A person is sitting at the desk near the window."
+    assert (
+        agent.runtime.scene["summary"]
+        == "A person is sitting at the desk near the window."
+    )
     assert agent.runtime.scene["source"] == "vision"
     assert agent.runtime.snapshot()["scene"]["summary"]
 
@@ -169,7 +176,9 @@ def test_stalled_task_fails_after_max_continuations(agent):
 
     asyncio.run(agent._background_tick())
 
-    assert agent.event_bus.empty() or agent.event_bus.get_nowait()["source"] != "continue"
+    assert (
+        agent.event_bus.empty() or agent.event_bus.get_nowait()["source"] != "continue"
+    )
     assert agent.runtime.intent.status == "blocked"
 
 

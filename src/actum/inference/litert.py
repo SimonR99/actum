@@ -73,7 +73,9 @@ class LiteRTProvider(InferenceProvider):
             )
         except Exception as exc:
             if compute != litert_lm.Backend.CPU:
-                print(f"[litert] GPU backend failed to initialize ({exc}); falling back to CPU")
+                print(
+                    f"[litert] GPU backend failed to initialize ({exc}); falling back to CPU"
+                )
                 compute = litert_lm.Backend.CPU
                 try:
                     self._engine = litert_lm.Engine(
@@ -84,7 +86,9 @@ class LiteRTProvider(InferenceProvider):
                     )
                 except Exception as exc2:
                     if "Vision Encoder" in str(exc2) or "vision" in str(exc2).lower():
-                        print(f"[litert] vision encoder unavailable ({exc2}); retrying on CPU without vision")
+                        print(
+                            f"[litert] vision encoder unavailable ({exc2}); retrying on CPU without vision"
+                        )
                         self.supports_vision = False
                         self._engine = litert_lm.Engine(
                             model_path,
@@ -94,7 +98,9 @@ class LiteRTProvider(InferenceProvider):
                     else:
                         raise
             elif "Vision Encoder" in str(exc) or "vision" in str(exc).lower():
-                print(f"[litert] vision encoder unavailable ({exc}); retrying without vision")
+                print(
+                    f"[litert] vision encoder unavailable ({exc}); retrying without vision"
+                )
                 self.supports_vision = False
                 self._engine = litert_lm.Engine(
                     model_path,

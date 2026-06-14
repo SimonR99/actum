@@ -129,15 +129,23 @@ class RobotTools:
                 parsed = parsed.get("nodes", [])
                 goal = parsed_goal
             if not isinstance(parsed, list):
-                raise ValueError("nodes_json must be a JSON array or object with nodes.")
+                raise ValueError(
+                    "nodes_json must be a JSON array or object with nodes."
+                )
             nodes = [item for item in parsed if isinstance(item, dict)]
         except Exception:
-            nodes = [{"label": line.strip()} for line in str(nodes_json).splitlines() if line.strip()]
+            nodes = [
+                {"label": line.strip()}
+                for line in str(nodes_json).splitlines()
+                if line.strip()
+            ]
         runtime.set_behavior_tree(goal, nodes)
         self._record("behavior_tree", goal=goal, nodes=len(nodes))
         return f"Behavior tree updated with {len(nodes)} node(s)."
 
-    def mark_behavior_node(self, node: str, status: str = "active", detail: str = "") -> str:
+    def mark_behavior_node(
+        self, node: str, status: str = "active", detail: str = ""
+    ) -> str:
         """Mark a behavior tree node active, waiting, done, blocked, or failed.
 
         Args:
@@ -150,7 +158,11 @@ class RobotTools:
             return "Runtime is not available."
         ok = runtime.mark_behavior_node(node, status, detail)
         self._record("behavior_node", node=node, status=status, detail=detail, ok=ok)
-        return f"Behavior node {node} marked {status}." if ok else f"Behavior node {node} was not found."
+        return (
+            f"Behavior node {node} marked {status}."
+            if ok
+            else f"Behavior node {node} was not found."
+        )
 
     # ── Communication ──────────────────────────────────────────────────────
 
@@ -190,10 +202,18 @@ class RobotTools:
                 ok=result.ok,
             )
             self._record_result(action, result)
-            print(f"[navigate] {direction} {distance_m:.2f} m ({'ok' if result.ok else 'failed'})")
+            print(
+                f"[navigate] {direction} {distance_m:.2f} m ({'ok' if result.ok else 'failed'})"
+            )
             return result.message
 
-        self._record("navigate", direction=direction, distance_m=distance_m, backend=None, ok=False)
+        self._record(
+            "navigate",
+            direction=direction,
+            distance_m=distance_m,
+            backend=None,
+            ok=False,
+        )
         print(f"[navigate] {direction} {distance_m:.2f} m")
         return "No robot backend configured."
 
@@ -206,7 +226,9 @@ class RobotTools:
         backend = self._backend
         if backend is not None:
             result = backend.rotate(degrees)
-            action = self._record("rotate", degrees=degrees, backend=backend.name, ok=result.ok)
+            action = self._record(
+                "rotate", degrees=degrees, backend=backend.name, ok=result.ok
+            )
             self._record_result(action, result)
             print(f"[rotate] {degrees:+.0f}° ({'ok' if result.ok else 'failed'})")
             return result.message
@@ -232,7 +254,9 @@ class RobotTools:
         backend = self._backend
         if backend is not None:
             result = backend.gesture(gesture)
-            action = self._record("wave", gesture=gesture, backend=backend.name, ok=result.ok)
+            action = self._record(
+                "wave", gesture=gesture, backend=backend.name, ok=result.ok
+            )
             self._record_result(action, result)
             print(f"[wave] {gesture}")
             return result.message
@@ -254,7 +278,9 @@ class RobotTools:
         backend = self._backend
         if backend is not None:
             result = backend.gripper(action)
-            record = self._record("gripper", action=action, backend=backend.name, ok=result.ok)
+            record = self._record(
+                "gripper", action=action, backend=backend.name, ok=result.ok
+            )
             self._record_result(record, result)
             print(f"[gripper] {action}")
             return result.message
@@ -356,7 +382,9 @@ class RobotTools:
         if store is None:
             return "Persistent memory is not available."
         record = store.record_observation(summary, source="agent", tags=_csv(tags))
-        self._record("record_observation", summary=summary, tags=_csv(tags), memory_id=record.id)
+        self._record(
+            "record_observation", summary=summary, tags=_csv(tags), memory_id=record.id
+        )
         return f"Recorded observation {record.id}."
 
     def remember_spatial_note(self, summary: str, place: str = "") -> str:
@@ -370,7 +398,9 @@ class RobotTools:
         if store is None:
             return "Persistent memory is not available."
         record = store.remember_spatial_note(summary, source="agent", place=place)
-        self._record("remember_spatial_note", summary=summary, place=place, memory_id=record.id)
+        self._record(
+            "remember_spatial_note", summary=summary, place=place, memory_id=record.id
+        )
         return f"Recorded spatial note {record.id}."
 
     def record_map_observation(
@@ -401,7 +431,13 @@ class RobotTools:
         if store is not None:
             record = store.remember_spatial_note(summary, source="agent", place=place)
             memory_id = record.id
-        self._record("map_observation", summary=summary, place=place, map_id=obs["id"], memory_id=memory_id)
+        self._record(
+            "map_observation",
+            summary=summary,
+            place=place,
+            map_id=obs["id"],
+            memory_id=memory_id,
+        )
         return f"Recorded map observation {obs['id']}."
 
     def update_body_perception(
@@ -430,8 +466,16 @@ class RobotTools:
                 joints = {}
         except Exception:
             joints = {}
-        runtime.update_body_perception(summary, posture=posture, holding=holding, contacts=_csv(contacts), joints=joints)
-        self._record("body_perception", summary=summary, posture=posture, holding=holding)
+        runtime.update_body_perception(
+            summary,
+            posture=posture,
+            holding=holding,
+            contacts=_csv(contacts),
+            joints=joints,
+        )
+        self._record(
+            "body_perception", summary=summary, posture=posture, holding=holding
+        )
         return "Body perception updated."
 
     def recent_memories(self, limit: int = 8, kind: str = "") -> str:
@@ -495,7 +539,9 @@ class RobotTools:
         if runtime is None:
             return "Runtime is not available."
         job = runtime.add_cron_job(name, every_seconds, instruction)
-        self._record("schedule_job", name=name, every_seconds=every_seconds, job_id=job["id"])
+        self._record(
+            "schedule_job", name=name, every_seconds=every_seconds, job_id=job["id"]
+        )
         return f"Scheduled {job['name']} every {job['every_seconds']:.0f} seconds."
 
     # ── External data / MCP ────────────────────────────────────────────────
@@ -514,7 +560,8 @@ class RobotTools:
                 action="web_fetch",
                 ok=True,
                 message=f"Fetched {data['final_url']}.",
-                data={key: value for key, value in data.items() if key != "text"} | {"chars": len(data["text"])},
+                data={key: value for key, value in data.items() if key != "text"}
+                | {"chars": len(data["text"])},
                 started_at=started,
                 ended_at=now(),
             )
@@ -568,7 +615,12 @@ class RobotTools:
         started = now()
         try:
             payload = mcp_bridge.list_tools(self._config, server)
-            action = self._record("list_mcp_tools", server=server, ok=True, count=len(payload.get("tools", [])))
+            action = self._record(
+                "list_mcp_tools",
+                server=server,
+                ok=True,
+                count=len(payload.get("tools", [])),
+            )
             result = ActionResult(
                 action="list_mcp_tools",
                 ok=True,

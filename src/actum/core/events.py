@@ -12,7 +12,9 @@ class EventLog:
     def __init__(self, maxlen: int = 1000):
         self._events: deque[Event] = deque(maxlen=maxlen)
 
-    def append(self, event_type: str, source: str, message: str = "", **data: Any) -> Event:
+    def append(
+        self, event_type: str, source: str, message: str = "", **data: Any
+    ) -> Event:
         event = Event(type=event_type, source=source, message=message, data=data)
         self._events.append(event)
         return event
