@@ -95,7 +95,10 @@ def hsv_range_from_dict(data: dict) -> HSVRange:
 def named_color_to_dict(entry: NamedColor) -> dict:
     payload = {"hsv_range": hsv_range_to_dict(entry.hsv_range)}
     if entry.sample_point is not None:
-        payload["sample_point"] = [int(entry.sample_point[0]), int(entry.sample_point[1])]
+        payload["sample_point"] = [
+            int(entry.sample_point[0]),
+            int(entry.sample_point[1]),
+        ]
     if entry.reference_bgr is not None:
         payload["reference_bgr"] = list(entry.reference_bgr)
     return payload
@@ -157,9 +160,7 @@ def load_color_library(path: Path) -> ColorLibrary:
 
     library = ColorLibrary(detection=payload.get("detection", {}))
     for name, params in payload.get("hsv_ranges", {}).items():
-        library.upsert(
-            NamedColor(name=name, hsv_range=hsv_range_from_dict(params))
-        )
+        library.upsert(NamedColor(name=name, hsv_range=hsv_range_from_dict(params)))
     return library
 
 

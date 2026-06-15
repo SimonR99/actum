@@ -336,6 +336,42 @@ class RobotTools:
             else "Backend does not support arm_pose."
         )
 
+    def go_home(self) -> str:
+        """Move the arm to a safe neutral home pose (one joint at a time)."""
+        backend = self._backend
+        if backend is not None and hasattr(backend, "go_home"):
+            result = backend.go_home()
+            record = self._record("go_home", backend=backend.name, ok=result.ok)
+            self._record_result(record, result)
+            print(f"[go_home] {'ok' if result.ok else 'failed'}")
+            return result.message
+        self._record("go_home", backend=None, ok=False)
+        return "No robot backend configured."
+
+    def record_arm_pose(self, name: str) -> str:
+        """Save the arm's current joint positions under a name for later replay."""
+        backend = self._backend
+        if backend is not None and hasattr(backend, "save_pose"):
+            result = backend.save_pose(name)
+            record = self._record(
+                "record_arm_pose", name=name, backend=backend.name, ok=result.ok
+            )
+            self._record_result(record, result)
+            return result.message
+        return "No robot backend configured."
+
+    def replay_arm_pose(self, name: str = "reach") -> str:
+        """Move the arm to a previously saved joint pose."""
+        backend = self._backend
+        if backend is not None and hasattr(backend, "replay_pose"):
+            result = backend.replay_pose(name)
+            record = self._record(
+                "replay_arm_pose", name=name, backend=backend.name, ok=result.ok
+            )
+            self._record_result(record, result)
+            return result.message
+        return "No robot backend configured."
+
     # ── Vision ─────────────────────────────────────────────────────────────
 
     def look(self) -> str:
@@ -763,6 +799,9 @@ class RobotTools:
             self.rotate,
             self.gripper,
             self.arm_pose,
+            self.go_home,
+            self.record_arm_pose,
+            self.replay_arm_pose,
             self.look,
             self.remember,
             self.recall,

@@ -64,7 +64,9 @@ def main(argv: list[str] | None = None) -> None:
     if not args.no_robot:
         try:
             config_path = _project_root() / "config.json"
-            agent_config = json.loads(config_path.read_text()) if config_path.exists() else {}
+            agent_config = (
+                json.loads(config_path.read_text()) if config_path.exists() else {}
+            )
             backend = create_backend(agent_config)
             if backend.connect():
                 print(f"[robot] connected: {backend.name}")

@@ -175,7 +175,9 @@ class BandDetector:
                     [band_range.h_min, band_range.s_min, band_range.v_min],
                     dtype=np.uint8,
                 )
-                upper_high = np.array([180, band_range.s_max, band_range.v_max], dtype=np.uint8)
+                upper_high = np.array(
+                    [180, band_range.s_max, band_range.v_max], dtype=np.uint8
+                )
                 lower_low = np.array(
                     [0, band_range.s_min, band_range.v_min],
                     dtype=np.uint8,
@@ -220,7 +222,10 @@ class BandDetector:
         for _, cx, cy in scored:
             if len(candidates) >= self.params.max_position_candidates:
                 break
-            if any(abs(cx - px) < min_sep and abs(cy - py) < min_sep for px, py in candidates):
+            if any(
+                abs(cx - px) < min_sep and abs(cy - py) < min_sep
+                for px, py in candidates
+            ):
                 continue
             candidates.append((cx, cy))
 
@@ -258,7 +263,10 @@ class BandDetector:
             for dy in offsets:
                 for dx in offsets:
                     nx, ny = cx + dx, cy + dy
-                    if not (margin <= nx < frame_w - margin and margin <= ny < frame_h - margin):
+                    if not (
+                        margin <= nx < frame_w - margin
+                        and margin <= ny < frame_h - margin
+                    ):
                         continue
                     key = (nx, ny)
                     if key in seen:
@@ -331,7 +339,9 @@ class BandDetector:
         center_y: int,
         angle_deg: float,
         line_len: int,
-    ) -> Tuple[np.ndarray, Tuple[int, int, int, int], Tuple[Tuple[int, int], Tuple[int, int]]]:
+    ) -> Tuple[
+        np.ndarray, Tuple[int, int, int, int], Tuple[Tuple[int, int], Tuple[int, int]]
+    ]:
         h, w = frame_bgr.shape[:2]
         strip_h = self._strip_height(h)
         if line_len < 1:
@@ -384,7 +394,9 @@ class BandDetector:
 
         if self.params.require_black_separators:
             band_indices = [
-                i for i, (n, _, _) in enumerate(runs) if n not in (SEPARATOR_NAME, UNKNOWN_NAME)
+                i
+                for i, (n, _, _) in enumerate(runs)
+                if n not in (SEPARATOR_NAME, UNKNOWN_NAME)
             ]
             for i in range(len(band_indices) - 1):
                 idx_a = band_indices[i]

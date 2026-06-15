@@ -9,8 +9,10 @@ the entrypoint script will pip-install it automatically.
 
 from __future__ import annotations
 
+import json
 import math
 import time
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -57,6 +59,16 @@ _ARM_JOINTS = [
     "wrist_roll",
 ]
 _GRIPPER = "gripper"
+_GRIPPER_OPEN = 2042
+_GRIPPER_CLOSED = 2620
+_HOME_POSE: dict[str, int] = {
+    "shoulder_pan": 2048,
+    "shoulder_lift": 2048,
+    "elbow_flex": 2048,
+    "wrist_flex": 2048,
+    "wrist_roll": 2048,
+    "gripper": _GRIPPER_OPEN,
+}
 
 # STS3215 position range: 0–4095, center = 2048.
 # Gesture sequences: list of ([pan, lift, elbow, wrist_flex, wrist_roll], delay_s)
@@ -104,6 +116,9 @@ class LeKiwiBackend(RobotBackend):
         self._bus = None
         self._lekiwi = None
         self._serial_port: str = self.config.get("serial_port", "/dev/ttyACM0")
+        self._poses_file: str = str(
+            self.config.get("poses_file", "logs/lekiwi_poses.json")
+        )
         self._present_motors: set[str] = set()
 
     def _probe_present_motors(self) -> set[str]:
@@ -163,18 +178,16 @@ class LeKiwiBackend(RobotBackend):
             self._present_motors = self._probe_present_motors()
             missing = sorted(set(_ALL_MOTORS) - self._present_motors)
             if missing:
-                print(
-                    f"[lekiwi] missing motors on bus (no response): {missing}"
-                )
+                print(f"[lekiwi] missing motors on bus (no response): {missing}")
 
             arm_present = [
-                name for name in _ARM_JOINTS + [_GRIPPER] if name in self._present_motors
+                name
+                for name in _ARM_JOINTS + [_GRIPPER]
+                if name in self._present_motors
             ]
             if arm_present:
                 # Enable torque on reachable arm joints (position mode by default)
-                self._bus.write(
-                    "Torque_Enable", TorqueMode.ENABLED.value, arm_present
-                )
+                self._bus.write("Torque_Enable", TorqueMode.ENABLED.value, arm_present)
 
             # LeKiwi.__init__ sets wheels to velocity mode (Mode=1)
             self._lekiwi = LeKiwi(self._bus)
@@ -316,11 +329,7 @@ class LeKiwiBackend(RobotBackend):
             )
 
         for positions, delay in seq:
-            names = [
-                joint
-                for joint in _ARM_JOINTS
-                if joint in self._present_motors
-            ]
+            names = [joint for joint in _ARM_JOINTS if joint in self._present_motors]
             if not names:
                 return self._result(
                     "gesture",
@@ -346,7 +355,9 @@ class LeKiwiBackend(RobotBackend):
             blocked.data["gripper_action"] = action
             return blocked
 
-        pos = 1200 if action.lower() in ("open", "release") else 2800
+        pos = (
+            _GRIPPER_OPEN if action.lower() in ("open", "release") else _GRIPPER_CLOSED
+        )
         try:
             before = int(self._bus.read("Present_Position", _GRIPPER)[0])
         except Exception as exc:
@@ -414,3 +425,150 @@ class LeKiwiBackend(RobotBackend):
         return self._result(
             "arm_pose", True, f"Arm posed: {positions}", started, positions=positions
         )
+
+    def _move_joints_slow(
+        self,
+        positions: dict[str, int],
+        delay_s: float = 0.6,
+        order: list[str] | None = None,
+    ) -> None:
+        joint_order = order or _ARM_JOINTS + [_GRIPPER]
+        for joint in joint_order:
+            if joint not in positions or joint not in self._present_motors:
+                continue
+            pos = max(0, min(4095, int(positions[joint])))
+            self._bus.write("Goal_Position", pos, joint)
+            time.sleep(delay_s)
+
+    def go_home(self) -> ActionResult:
+        """Return arm to neutral one joint at a time (avoids power spikes)."""
+        started = now()
+        if not self.connected or not self._bus:
+            return self._result("go_home", False, "Not connected.", started)
+
+        self._move_joints_slow(_HOME_POSE, delay_s=0.6)
+
+        return self._result(
+            "go_home",
+            True,
+            "Arm moved to home (sequential).",
+            started,
+            positions=dict(_HOME_POSE),
+        )
+
+    def _poses_path(self) -> Path:
+        path = Path(self._poses_file)
+        if path.is_absolute():
+            return path
+        for base in (Path("/workspace"), Path.cwd()):
+            return base / path
+        return path
+
+    def _load_poses(self) -> dict[str, dict[str, Any]]:
+        path = self._poses_path()
+        if not path.is_file():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _write_poses(self, poses: dict[str, dict[str, Any]]) -> None:
+        path = self._poses_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(poses, indent=2) + "\n", encoding="utf-8")
+
+    def read_arm_positions(self) -> dict[str, int]:
+        positions: dict[str, int] = {}
+        for name in _ARM_JOINTS + [_GRIPPER]:
+            if name not in self._present_motors:
+                continue
+            raw = self._bus.read("Present_Position", name)
+            positions[name] = int(raw[0] if hasattr(raw, "__len__") else raw)
+        return positions
+
+    def save_pose(self, name: str) -> ActionResult:
+        started = now()
+        if not self.connected or not self._bus:
+            return self._result(
+                "save_pose", False, "Not connected.", started, pose=name
+            )
+
+        clean = str(name).strip().lower().replace(" ", "_")
+        if not clean:
+            return self._result("save_pose", False, "Pose name is required.", started)
+
+        try:
+            positions = self.read_arm_positions()
+        except Exception as exc:
+            return self._result(
+                "save_pose", False, f"Failed to read arm: {exc}", started, pose=clean
+            )
+        if not positions:
+            return self._result(
+                "save_pose", False, "No arm motors available.", started, pose=clean
+            )
+
+        poses = self._load_poses()
+        poses[clean] = {
+            **positions,
+            "saved_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        try:
+            self._write_poses(poses)
+        except OSError as exc:
+            return self._result(
+                "save_pose",
+                False,
+                f"Failed to write poses file: {exc}",
+                started,
+                pose=clean,
+            )
+
+        return self._result(
+            "save_pose",
+            True,
+            f"Saved pose {clean!r} ({len(positions)} joints).",
+            started,
+            pose=clean,
+            positions=positions,
+            poses_file=str(self._poses_path()),
+        )
+
+    def replay_pose(self, name: str) -> ActionResult:
+        started = now()
+        clean = str(name).strip().lower().replace(" ", "_")
+        poses = self._load_poses()
+        entry = poses.get(clean)
+        if not isinstance(entry, dict):
+            available = sorted(poses.keys())
+            return self._result(
+                "replay_pose",
+                False,
+                f"Unknown pose {clean!r}. Saved: {available}",
+                started,
+                pose=clean,
+            )
+
+        positions = {key: int(entry[key]) for key in _ARM_JOINTS if key in entry}
+        if not self.connected or not self._bus:
+            return self._result(
+                "replay_pose", False, "Not connected.", started, pose=clean
+            )
+
+        blocked = self._require_motors(list(positions.keys()), "replay_pose", started)
+        if blocked is not None:
+            blocked.data["pose"] = clean
+            return blocked
+
+        self._move_joints_slow(positions, delay_s=0.6)
+        result = self._result(
+            "replay_pose",
+            True,
+            f"Replayed pose {clean!r} (slow, arm only).",
+            started,
+            pose=clean,
+            positions=positions,
+        )
+        return result

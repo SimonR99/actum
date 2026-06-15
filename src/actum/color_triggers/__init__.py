@@ -6,8 +6,17 @@ from actum.color_triggers.actions import (
     TriggerAction,
     load_trigger_config,
 )
-from actum.color_triggers.detector import BandDetectionResult, BandDetector, DetectionParams
-from actum.color_triggers.library import Combination, ColorLibrary, load_color_library, match_combinations
+from actum.color_triggers.detector import (
+    BandDetectionResult,
+    BandDetector,
+    DetectionParams,
+)
+from actum.color_triggers.library import (
+    Combination,
+    ColorLibrary,
+    load_color_library,
+    match_combinations,
+)
 from actum.color_triggers.watcher import ColorTriggerWatcher
 
 __all__ = [

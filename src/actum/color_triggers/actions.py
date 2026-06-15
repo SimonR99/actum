@@ -42,7 +42,9 @@ class ColorTriggerConfig:
     actions: dict[str, TriggerAction] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None, base_dir: Path | None = None) -> ColorTriggerConfig:
+    def from_dict(
+        cls, data: dict[str, Any] | None, base_dir: Path | None = None
+    ) -> ColorTriggerConfig:
         if not data:
             return cls()
         actions: dict[str, TriggerAction] = {}
@@ -79,7 +81,12 @@ class ActionExecutor:
         self.backend = backend
         self.on_action = on_action
 
-    def execute(self, group_name: str, action: TriggerAction, context: dict[str, Any] | None = None) -> ActionResult | None:
+    def execute(
+        self,
+        group_name: str,
+        action: TriggerAction,
+        context: dict[str, Any] | None = None,
+    ) -> ActionResult | None:
         context = context or {}
         action_type = action.type.lower()
         params = dict(action.params)

@@ -73,7 +73,9 @@ def main() -> None:
             import json
 
             config_path = ROOT / "config.json"
-            agent_config = json.loads(config_path.read_text()) if config_path.exists() else {}
+            agent_config = (
+                json.loads(config_path.read_text()) if config_path.exists() else {}
+            )
             backend = create_backend(agent_config)
             if backend.connect():
                 print(f"[robot] connected: {backend.name}")

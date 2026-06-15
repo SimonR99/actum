@@ -185,7 +185,11 @@ class OpenAIProvider(InferenceProvider):
             maybe_fire(idx)
 
         calls = [
-            {"id": call_id(i), "name": slots[i]["name"], "arguments": slots[i]["arguments"]}
+            {
+                "id": call_id(i),
+                "name": slots[i]["name"],
+                "arguments": slots[i]["arguments"],
+            }
             for i in sorted(slots)
         ]
         return "".join(content_parts), calls, fired

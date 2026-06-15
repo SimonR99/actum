@@ -8,7 +8,11 @@ import pytest
 
 cv2 = pytest.importorskip("cv2")
 
-from actum.color_triggers.actions import ActionExecutor, ColorTriggerConfig, TriggerAction
+from actum.color_triggers.actions import (
+    ActionExecutor,
+    ColorTriggerConfig,
+    TriggerAction,
+)
 from actum.color_triggers.colors import default_tape_colors, extract_label_runs
 from actum.color_triggers.detector import BandDetector, DetectionParams
 from actum.color_triggers.library import (
@@ -46,17 +50,25 @@ def test_save_load_calibration_roundtrip(tmp_path):
     library = ColorLibrary()
     from actum.color_triggers.colors import HSVRange
 
-    library.upsert(NamedColor(name="pink", hsv_range=HSVRange(156, 173, 100, 255, 150, 255)))
+    library.upsert(
+        NamedColor(name="pink", hsv_range=HSVRange(156, 173, 100, 255, 150, 255))
+    )
     library.upsert_combination(Combination("group-1", ["purple", "blue", "pink"]))
     save_color_library(path, library)
 
     loaded = load_color_library(path)
     assert "group-1" in loaded.combinations
-    assert loaded.combinations["group-1"].color_set() == frozenset({"purple", "blue", "pink"})
+    assert loaded.combinations["group-1"].color_set() == frozenset(
+        {"purple", "blue", "pink"}
+    )
 
 
 def test_detector_finds_synthetic_group(tmp_path):
-    cal_path = Path(__file__).resolve().parents[1] / "config" / "color_triggers_calibration.json"
+    cal_path = (
+        Path(__file__).resolve().parents[1]
+        / "config"
+        / "color_triggers_calibration.json"
+    )
     detector = BandDetector(calibration_path=cal_path)
     frame, _ = generate_tag_image(
         seed=7,
@@ -89,7 +101,9 @@ def test_watcher_fires_once_with_cooldown():
     cfg = ColorTriggerConfig(
         enabled=True,
         calibration_path=str(
-            Path(__file__).resolve().parents[1] / "config" / "color_triggers_calibration.json"
+            Path(__file__).resolve().parents[1]
+            / "config"
+            / "color_triggers_calibration.json"
         ),
         detect_every_frames=1,
         cooldown_seconds=60.0,
@@ -124,7 +138,11 @@ def test_trigger_config_from_dict(tmp_path):
             {
                 "enabled": True,
                 "actions": {
-                    "group-2": {"type": "drive", "direction": "forward", "distance_m": 0.5}
+                    "group-2": {
+                        "type": "drive",
+                        "direction": "forward",
+                        "distance_m": 0.5,
+                    }
                 },
             }
         )

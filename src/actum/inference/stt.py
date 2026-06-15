@@ -105,7 +105,9 @@ class WhisperSTT(STTEngine):
         # is ~2-3× faster than the float default for a negligible accuracy hit,
         # so prefer it when the caller hasn't pinned a compute type.
         if compute_type in ("", "auto"):
-            self._compute_type = "int8" if (device or "auto") in ("auto", "cpu") else "default"
+            self._compute_type = (
+                "int8" if (device or "auto") in ("auto", "cpu") else "default"
+            )
         else:
             self._compute_type = compute_type
         self._device = device or "auto"

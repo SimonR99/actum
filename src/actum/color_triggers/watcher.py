@@ -11,7 +11,11 @@ from typing import Any, Callable
 import numpy as np
 
 from actum.backends.base import RobotBackend
-from actum.color_triggers.actions import ActionCallback, ActionExecutor, ColorTriggerConfig
+from actum.color_triggers.actions import (
+    ActionCallback,
+    ActionExecutor,
+    ColorTriggerConfig,
+)
 from actum.color_triggers.detector import BandDetectionResult, BandDetector
 
 
@@ -59,7 +63,10 @@ class ColorTriggerWatcher:
 
         group = result.matched_combinations[0]
         now = time.time()
-        if group == self._last_group and (now - self._last_fired_at) < self.config.cooldown_seconds:
+        if (
+            group == self._last_group
+            and (now - self._last_fired_at) < self.config.cooldown_seconds
+        ):
             return result
 
         action = self.config.actions.get(group)
@@ -146,7 +153,8 @@ def load_merged_config(
     merged = ColorTriggerConfig(
         enabled=inline_cfg.enabled or file_cfg.enabled,
         calibration_path=inline_cfg.calibration_path or file_cfg.calibration_path,
-        detect_every_frames=inline_cfg.detect_every_frames or file_cfg.detect_every_frames,
+        detect_every_frames=inline_cfg.detect_every_frames
+        or file_cfg.detect_every_frames,
         cooldown_seconds=inline_cfg.cooldown_seconds or file_cfg.cooldown_seconds,
         show_debug=inline_cfg.show_debug or file_cfg.show_debug,
         actions={**file_cfg.actions, **inline_cfg.actions},
