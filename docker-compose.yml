@@ -43,7 +43,11 @@ services:
       
       # Model cache (persistent across runs)
       - actum-huggingface:/root/.cache/huggingface
-      
+
+      # pip wheel cache (persistent across runs) so the entrypoint's lerobot
+      # install doesn't recompile native deps like blosc on every start.
+      - actum-pip-cache:/root/.cache/pip
+
       # Agent memory + logs
       - ./logs:/workspace/logs
       
@@ -73,8 +77,11 @@ services:
       retries: 3
       start_period: 60s
 
-# Named volume for model caching (shared across runs)
+# Named volumes (shared across runs)
 volumes:
   actum-huggingface:
     name: actum-huggingface
+    driver: local
+  actum-pip-cache:
+    name: actum-pip-cache
     driver: local

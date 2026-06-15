@@ -109,6 +109,13 @@ class RobotAgent:
         # Per-turn state (reset at the start of each process_event call)
         self._pending_speech: list[str] = []
         self._pending_frame: str | None = None  # base64 JPEG
+        # Speech is started the moment the model calls speak(), overlapping the
+        # rest of the tool loop. These track the in-flight playback coroutines
+        # and the event loop they run on (set per turn in process_event).
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._speech_futures: list = []
+        self._speech_lock: asyncio.Lock | None = None
+        self._first_speech_at: float = 0.0
 
         # Thread-safe event queue: anything that triggers the agent goes here
         self.event_bus: asyncio.Queue = asyncio.Queue()
@@ -134,7 +141,7 @@ class RobotAgent:
         Blocking — run via executor. The active provider (local LiteRT, OpenAI,
         …) and its compute backend come from the active speed profile.
         """
-        self.tts_backend = tts_module.load()
+        self.tts_backend = tts_module.load(self.runtime.settings)
         self.tools = RobotTools(self)
         self._rebuild_provider()
 
@@ -259,6 +266,12 @@ class RobotAgent:
         self.tools._reset()
         self._pending_speech.clear()
         self._pending_frame = None
+        self._speech_futures = []
+        self._first_speech_at = 0.0
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = None
 
         event = dict(event)
         event["_companion_decision"] = decision.to_dict()
@@ -290,6 +303,16 @@ class RobotAgent:
         elapsed = time.time() - t0
         action_types = [a["type"] for a in self.tools.actions_taken]
         print(f"turn ({elapsed:.2f}s) | {' → '.join(action_types) or 'no actions'}")
+        if os.environ.get("ACTUM_TIMING"):
+            spoke_at = self._first_speech_at - t0 if self._first_speech_at else None
+            print(
+                f"[timing] llm+tools={elapsed:.2f}s"
+                + (
+                    f" | first speak() queued at +{spoke_at:.2f}s"
+                    if spoke_at is not None
+                    else " | no speech this turn"
+                )
+            )
 
         actions = list(self.tools.actions_taken)
         # A final plain-text reply (no tool call) is still an answer for the
@@ -327,11 +350,36 @@ class RobotAgent:
             }
         )
 
-        # Execute queued speech after broadcast so the UI updates first.
+        # Speech for this turn was already kicked off the instant the model
+        # called speak() (see queue_speech), overlapping the rest of the tool
+        # loop. Wait for those playbacks to finish so the turn doesn't return
+        # while the robot is still talking. The _pending_speech list is only
+        # populated on the fallback path (no bound event loop, e.g. tests).
         for text in self._pending_speech:
             await self._speak(text)
+        for fut in self._speech_futures:
+            with suppress(Exception):
+                await asyncio.wrap_future(fut)
 
         return actions
+
+    def queue_speech(self, text: str) -> None:
+        """Start speaking `text` immediately, overlapping the running tool loop.
+
+        Called from the provider's tool thread when the model invokes speak().
+        Scheduling onto the agent event loop lets playback begin before the
+        model finishes the turn with done(), removing seconds of dead air.
+        Falls back to the deferred queue when no loop is bound (unit tests).
+        """
+        if not text.strip():
+            return
+        if not self._first_speech_at:
+            self._first_speech_at = time.time()
+        if self._loop is None:
+            self._pending_speech.append(text)
+            return
+        fut = asyncio.run_coroutine_threadsafe(self._speak(text), self._loop)
+        self._speech_futures.append(fut)
 
     def _record_turn_memory(self, event: dict, actions: list[dict]):
         source = str(event.get("source", "unknown"))
@@ -372,9 +420,12 @@ class RobotAgent:
         if event.get("audio"):
             # Transcribe through the selected STT engine; if it yields nothing
             # (engine is "model", disabled, or failed), pass raw audio to the model.
+            stt_t0 = time.time()
             transcript = (
                 self.stt.transcribe(event["audio"]) if self.stt is not None else ""
             )
+            if os.environ.get("ACTUM_TIMING") and self.stt is not None:
+                print(f"[timing] stt={time.time() - stt_t0:.2f}s")
             if transcript:
                 content.append({"type": "text", "text": f"(voice) {transcript}"})
                 event["text"] = transcript
@@ -472,17 +523,29 @@ class RobotAgent:
     async def _speak(self, text: str):
         if not text.strip():
             return
-        # Mute the mic while the robot talks so it doesn't transcribe its own
-        # voice and trigger itself in a feedback loop.
-        if self.mic is not None:
-            self.mic.pause()
-        try:
-            await self._speak_unmuted(text)
-        finally:
+        # speak() can be called several times in one turn; each schedules its
+        # own _speak coroutine, so serialize them to keep utterances in order
+        # and stop two sd.play() calls from overlapping on the same device.
+        if self._speech_lock is None:
+            self._speech_lock = asyncio.Lock()
+        async with self._speech_lock:
+            # Mute the mic while the robot talks so it doesn't transcribe its own
+            # voice and trigger itself in a feedback loop.
             if self.mic is not None:
-                self.mic.resume()
+                self.mic.pause()
+            try:
+                await self._speak_unmuted(text)
+            finally:
+                if self.mic is not None:
+                    self.mic.resume()
 
     async def _speak_unmuted(self, text: str):
+        # Strip emoji and other non-readable characters so the speech engine
+        # doesn't vocalise them as noise (and Unitree TTS stays clean too).
+        text = tts_module.strip_unspeakable(text)
+        if not text:
+            return
+
         mode = self.get_mode()
         if mode == "unitree":
             if (
@@ -506,18 +569,46 @@ class RobotAgent:
             print("[tts] no backend loaded — skipping speech")
             return
 
-        print(f"[tts] generating: {text!r}")
+        language = self.config.get("language", "en")
+        voice = "ff_siwis" if language == "fr" else "af_heart"
+        # Phonemizer language code for kokoro-onnx — without it French is spoken
+        # with an English accent.
+        lang_code = "fr-fr" if language == "fr" else "en-us"
+        sentences = tts_module.split_sentences(text)
+        backend_name = type(self.tts_backend).__name__
+        print(f"[tts] generating {len(sentences)} sentence(s): {text!r}")
+        print(
+            f"[tts] backend={backend_name} language={language} lang={lang_code} "
+            f"voice={voice}"
+        )
+
+        loop = asyncio.get_running_loop()
+        timing = bool(os.environ.get("ACTUM_TIMING"))
+        turn_t0 = time.time()
+
+        def generate(sentence: str):
+            return self.tts_backend.generate(sentence, voice=voice, lang=lang_code)
+
         try:
-            language = self.config.get("language", "en")
-            voice = "ff_siwis" if language == "fr" else "af_heart"
-            print(f"[tts] voice: {voice} (language={language})")
-            pcm = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: self.tts_backend.generate(text, voice=voice)
-            )
-            print(
-                f"[tts] playing {len(pcm) / self.tts_backend.sample_rate:.2f}s of audio"
-            )
-            await self._play_audio(pcm)
+            # Pipeline: generate sentence i+1 while sentence i is playing, so the
+            # first audio starts after only one sentence is synthesised instead
+            # of the whole reply, and gaps between sentences stay tight.
+            next_pcm = await loop.run_in_executor(None, generate, sentences[0])
+            if timing:
+                print(
+                    f"[timing] tts first-sentence={time.time() - turn_t0:.2f}s "
+                    f"({len(sentences)} sentence(s))"
+                )
+            for i, sentence in enumerate(sentences):
+                pcm = next_pcm
+                gen_fut = (
+                    loop.run_in_executor(None, generate, sentences[i + 1])
+                    if i + 1 < len(sentences)
+                    else None
+                )
+                await self._play_audio(pcm)
+                if gen_fut is not None:
+                    next_pcm = await gen_fut
         except Exception as e:
             print(f"[tts] error: {e}")
 

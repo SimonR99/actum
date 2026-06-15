@@ -8,6 +8,9 @@ class FakeAgent:
         self.config = config or (runtime.config if runtime is not None else {})
         self._pending_speech = []
 
+    def queue_speech(self, text):
+        self._pending_speech.append(text)
+
 
 def test_navigate_uses_backend_when_available():
     runtime = RobotRuntime({"robot": {"backend": "fake"}}, "testbot")

@@ -173,10 +173,10 @@ class RobotTools:
             text: What to say. 1-2 sentences max. Do not repeat yourself.
         """
         text = _clean(text)
-        self._agent._pending_speech.append(text)
+        self._agent.queue_speech(text)
         self._record("speak", text=text)
         print(f"[speak] {text!r}")
-        return "Queued for speech."
+        return "Speaking now."
 
     # ── Locomotion ─────────────────────────────────────────────────────────
 

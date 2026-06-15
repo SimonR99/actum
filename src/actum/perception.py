@@ -291,8 +291,8 @@ class EnergyVAD:
         noise_floor_init: float = 0.030,  # safe starting estimate
         noise_floor_alpha: float = 0.005,  # EMA adaptation speed (~6 s to converge)
         min_speech_chunks: int = 10,  # ~300 ms
-        silence_chunks: int = 25,  # ~750 ms
-        pre_roll_chunks: int = 5,  # ~150 ms pre-speech padding
+        silence_chunks: int = 20,  # ~600 ms (hangover before ending speech)
+        pre_roll_chunks: int = 10,  # ~300 ms pre-speech padding
     ):
         self.speech_ratio = speech_ratio
         self.silence_ratio = silence_ratio
@@ -374,8 +374,8 @@ class SileroVAD:
         threshold: float = 0.5,
         neg_threshold: float = 0.35,
         min_speech_chunks: int = 8,  # ~250 ms
-        silence_chunks: int = 25,  # ~750 ms
-        pre_roll_chunks: int = 8,  # ~250 ms pre-speech padding
+        silence_chunks: int = 19,  # ~600 ms (hangover before ending speech)
+        pre_roll_chunks: int = 12,  # ~380 ms pre-speech padding
         max_speech_chunks: int = 500,  # ~15 s max utterance safety cap
     ):
         self.threshold = threshold
@@ -479,20 +479,44 @@ class SileroVAD:
         return result_pcm
 
 
-def build_default_vad():
-    """Build the best available VAD: SileroVAD if faster_whisper is present, else EnergyVAD."""
+def _ms_to_chunks(env_name: str, default_chunks: int, ms_per_chunk: float) -> int:
+    """Translate an optional millisecond env override into VAD chunk counts."""
+    value = _env(env_name)
+    if not value:
+        return default_chunks
     try:
-        import faster_whisper.vad
+        return max(1, round(float(value) / ms_per_chunk))
+    except ValueError:
+        return default_chunks
+
+
+def build_default_vad():
+    """Build the best available VAD: SileroVAD if faster_whisper is present, else EnergyVAD.
+
+    Tune capture boundaries without code edits via:
+      ACTUM_VAD_SILENCE_MS  — hangover before speech is considered finished
+                              (raise it if word endings get clipped).
+      ACTUM_VAD_PREROLL_MS  — audio kept before speech onset
+                              (raise it if word beginnings get clipped).
+    """
+    try:
+        import faster_whisper.vad  # noqa: F401
 
         print(
             "[audio] Initializing Silero VAD (deep learning) for voice activity detection."
         )
-        return SileroVAD()
+        return SileroVAD(
+            silence_chunks=_ms_to_chunks("ACTUM_VAD_SILENCE_MS", 19, 32.0),
+            pre_roll_chunks=_ms_to_chunks("ACTUM_VAD_PREROLL_MS", 12, 32.0),
+        )
     except Exception as e:
         print(
             f"[audio] Silero VAD unavailable ({e}). Falling back to adaptive EnergyVAD."
         )
-        return EnergyVAD()
+        return EnergyVAD(
+            silence_chunks=_ms_to_chunks("ACTUM_VAD_SILENCE_MS", 20, float(CHUNK_MS)),
+            pre_roll_chunks=_ms_to_chunks("ACTUM_VAD_PREROLL_MS", 10, float(CHUNK_MS)),
+        )
 
 
 # ── Microphone capture ─────────────────────────────────────────────────────────

@@ -66,26 +66,44 @@ class OpenAIProvider(InferenceProvider):
         )
         final_text = ""
         for _ in range(_MAX_TOOL_ROUNDS):
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=self._messages,
-                tools=self._tool_schemas or None,
-                tool_choice="auto" if self._tool_schemas else None,
-            )
-            message = response.choices[0].message
-            self._messages.append(message.model_dump(exclude_none=True))
+            assistant_text, calls, fired = self._stream_turn()
 
-            if not message.tool_calls:
-                final_text = message.content or ""
+            # Assemble the assistant message exactly as the API needs it back.
+            assistant_msg: dict[str, Any] = {"role": "assistant"}
+            if assistant_text:
+                assistant_msg["content"] = assistant_text
+            if calls:
+                assistant_msg["tool_calls"] = [
+                    {
+                        "id": c["id"],
+                        "type": "function",
+                        "function": {
+                            "name": c["name"],
+                            "arguments": c["arguments"] or "{}",
+                        },
+                    }
+                    for c in calls
+                ]
+            self._messages.append(assistant_msg)
+
+            if not calls:
+                final_text = assistant_text
                 break
 
             done_called = False
-            for call in message.tool_calls:
-                result = self._run_tool(call.function.name, call.function.arguments)
-                self._messages.append(
-                    {"role": "tool", "tool_call_id": call.id, "content": result}
+            for c in calls:
+                # speak() may already have run mid-stream (see _stream_turn) so
+                # the robot starts talking before the model finishes the turn;
+                # reuse that result instead of re-running it.
+                result = (
+                    fired[c["id"]]
+                    if c["id"] in fired
+                    else self._run_tool(c["name"], c["arguments"])
                 )
-                if call.function.name == "done":
+                self._messages.append(
+                    {"role": "tool", "tool_call_id": c["id"], "content": result}
+                )
+                if c["name"] == "done":
                     done_called = True
 
             frame = self._pop_pending_frame()
@@ -104,6 +122,73 @@ class OpenAIProvider(InferenceProvider):
 
         self._trim_history()
         return final_text
+
+    def _stream_turn(self):
+        """Stream one assistant message, firing speak() as soon as it's ready.
+
+        Returns ``(assistant_text, calls, fired)`` where ``calls`` is the ordered
+        list of tool calls ({id, name, arguments}) and ``fired`` maps the ids of
+        any tool calls already executed during the stream to their result. Only
+        ``speak`` is run early — its arguments are complete the instant the next
+        tool call begins streaming, so playback can start without waiting for the
+        rest of the turn (other tools keep their original post-message ordering).
+        """
+        stream = self._client.chat.completions.create(
+            model=self._model,
+            messages=self._messages,
+            tools=self._tool_schemas or None,
+            tool_choice="auto" if self._tool_schemas else None,
+            stream=True,
+        )
+
+        content_parts: list[str] = []
+        slots: dict[int, dict[str, Any]] = {}
+        fired: dict[str, str] = {}
+        max_index = -1
+
+        def call_id(idx: int) -> str:
+            return slots[idx].get("id") or f"call_{idx}"
+
+        def maybe_fire(idx: int) -> None:
+            slot = slots.get(idx)
+            if not slot or slot["name"] != "speak":
+                return
+            cid = call_id(idx)
+            if cid not in fired:
+                fired[cid] = self._run_tool("speak", slot["arguments"])
+
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if delta is None:
+                continue
+            if delta.content:
+                content_parts.append(delta.content)
+            for tc in delta.tool_calls or []:
+                idx = tc.index
+                slot = slots.setdefault(idx, {"id": None, "name": "", "arguments": ""})
+                if tc.id:
+                    slot["id"] = tc.id
+                if tc.function:
+                    if tc.function.name:
+                        slot["name"] = tc.function.name
+                    if tc.function.arguments:
+                        slot["arguments"] += tc.function.arguments
+                if idx > max_index:
+                    # Every lower index has finished streaming its arguments.
+                    for done_idx in range(max(0, max_index), idx):
+                        maybe_fire(done_idx)
+                    max_index = idx
+
+        for idx in slots:
+            maybe_fire(idx)
+
+        calls = [
+            {"id": call_id(i), "name": slots[i]["name"], "arguments": slots[i]["arguments"]}
+            for i in sorted(slots)
+        ]
+        return "".join(content_parts), calls, fired
 
     def _run_tool(self, name: str, raw_arguments: str) -> str:
         tool = self._tool_map.get(name)

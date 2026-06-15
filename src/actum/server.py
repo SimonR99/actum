@@ -476,31 +476,40 @@ def attach_server(agent: RobotAgent, app: FastAPI):
                     payload = None
 
                 if payload is not None:
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "type": "turn",
-                                "source": payload.get("source", ""),
-                                "actions": payload.get("actions", []),
-                                "elapsed": payload.get("elapsed", 0.0),
-                                "ignored": bool(payload.get("ignored")),
-                                "state_only": bool(payload.get("state_only")),
-                                "reason": payload.get("reason", ""),
-                                "error": payload.get("error", ""),
-                                "companion": payload.get("companion", {}),
-                            }
+                    # Typed payloads (mic level, live transcript, …) are forwarded
+                    # verbatim. Untyped payloads are turn summaries: rewrap them and
+                    # follow with fresh memory/state snapshots so the UI stays in sync.
+                    if payload.get("type"):
+                        await ws.send_text(json.dumps(payload))
+                    else:
+                        await ws.send_text(
+                            json.dumps(
+                                {
+                                    "type": "turn",
+                                    "source": payload.get("source", ""),
+                                    "actions": payload.get("actions", []),
+                                    "elapsed": payload.get("elapsed", 0.0),
+                                    "ignored": bool(payload.get("ignored")),
+                                    "state_only": bool(payload.get("state_only")),
+                                    "reason": payload.get("reason", ""),
+                                    "error": payload.get("error", ""),
+                                    "companion": payload.get("companion", {}),
+                                }
+                            )
                         )
-                    )
-                    await ws.send_text(
-                        json.dumps(
-                            {"type": "memory", "data": agent.runtime.memory.snapshot()}
+                        await ws.send_text(
+                            json.dumps(
+                                {
+                                    "type": "memory",
+                                    "data": agent.runtime.memory.snapshot(),
+                                }
+                            )
                         )
-                    )
-                    await ws.send_text(
-                        json.dumps(
-                            {"type": "state", "data": _state_snapshot(agent, app)}
+                        await ws.send_text(
+                            json.dumps(
+                                {"type": "state", "data": _state_snapshot(agent, app)}
+                            )
                         )
-                    )
 
                 await send_latest_frame()
         except WebSocketDisconnect:

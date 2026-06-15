@@ -98,11 +98,22 @@ class WhisperSTT(STTEngine):
         compute_type: str = "auto",
         device: str = "auto",
         language: str = "",
+        beam_size: int = 1,
     ):
         self._model_size = model_size or DEFAULT_WHISPER_MODEL
-        self._compute_type = "default" if compute_type in ("", "auto") else compute_type
+        # On CPU-only targets (Raspberry Pi / Jetson without the GPU wheel) int8
+        # is ~2-3× faster than the float default for a negligible accuracy hit,
+        # so prefer it when the caller hasn't pinned a compute type.
+        if compute_type in ("", "auto"):
+            self._compute_type = "int8" if (device or "auto") in ("auto", "cpu") else "default"
+        else:
+            self._compute_type = compute_type
         self._device = device or "auto"
         self._language = (language or "").strip() or None
+        # Greedy decoding (beam_size=1) is markedly faster than beam search on
+        # CPU and rarely changes short command transcripts. Operators can raise
+        # it via speech.whisper_beam_size when accuracy matters more than speed.
+        self._beam_size = max(1, int(beam_size or 1))
         self._model: Any = None
         self._warned_missing = False
 
@@ -136,6 +147,9 @@ class WhisperSTT(STTEngine):
             return ""
 
         try:
+            import time
+
+            t0 = time.time()
             audio = _wav_b64_to_16k_mono(audio_b64)
             # The energy VAD has already decided this clip contains speech, so we
             # relax Whisper's own no-speech gate (its default 0.6 discards
@@ -144,14 +158,19 @@ class WhisperSTT(STTEngine):
             segments, _ = model.transcribe(
                 audio,
                 language=self._language,
-                beam_size=5,
+                beam_size=self._beam_size,
                 temperature=0.0,
                 condition_on_previous_text=False,
                 no_speech_threshold=0.85,
             )
             text = " ".join(segment.text.strip() for segment in segments).strip()
             if text:
-                print(f"[stt] transcript: {text!r}")
+                audio_s = audio.size / WHISPER_SAMPLE_RATE
+                dt = time.time() - t0
+                print(
+                    f"[stt] transcript ({dt:.2f}s for {audio_s:.1f}s audio, "
+                    f"{audio_s / dt:.1f}× RT): {text!r}"
+                )
             else:
                 print("[stt] whisper produced no text (audio too quiet or empty?)")
             return text
@@ -216,6 +235,7 @@ def build_stt(settings: Any) -> STTEngine | None:
             compute_type=str(speech.get("whisper_compute", "auto")),
             device=str(speech.get("whisper_device", "auto")),
             language=stt_lang,
+            beam_size=int(speech.get("whisper_beam_size", 1) or 1),
         )
     if engine == "openai":
         from actum.inference import resolve_api_key

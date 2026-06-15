@@ -108,11 +108,16 @@
     "_enabled_comment": "Empty means all registered tools are available."
   },
   "speech": {
-    "stt_engine": "whisper",
+    "stt_engine": "openai",
     "_stt_engine_options": "whisper (local) | openai (cloud) | model (multimodal passthrough)",
     "whisper_model": "small",
     "_whisper_model_options": "tiny | base | small | medium | large-v3",
-    "whisper_compute": "auto"
+    "whisper_compute": "auto",
+    "whisper_beam_size": 1,
+    "tts_engine": "openai",
+    "_tts_engine_options": "local (Kokoro on-device) | openai (cloud, offloads the Pi CPU)",
+    "openai_tts_model": "gpt-4o-mini-tts",
+    "openai_tts_voice": "alloy"
   },
   "memory": {
     "enabled": true,
