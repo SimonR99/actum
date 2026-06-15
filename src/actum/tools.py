@@ -288,6 +288,54 @@ class RobotTools:
         print(f"[gripper] {action}")
         return "No robot backend configured."
 
+    def arm_pose(
+        self,
+        shoulder_pan: int = 2048,
+        shoulder_lift: int = 2048,
+        elbow_flex: int = 2048,
+        wrist_flex: int = 2048,
+        wrist_roll: int = 2048,
+        gripper: int | None = None,
+    ) -> str:
+        """Move the robot arm to a specific pose using raw joint positions.
+
+        All positions are in range 0–4095 (STS3215 servo), center = 2048.
+        Omit gripper to leave it unchanged.
+
+        Args:
+            shoulder_pan:  Left/right rotation of the base (0=right, 2048=center, 4095=left).
+            shoulder_lift: Up/down tilt of the shoulder.
+            elbow_flex:    Elbow bend.
+            wrist_flex:    Wrist up/down tilt.
+            wrist_roll:    Wrist rotation.
+            gripper:       Gripper width (1200=open, 2800=closed). None = unchanged.
+        """
+        positions: dict[str, int] = {
+            "shoulder_pan": shoulder_pan,
+            "shoulder_lift": shoulder_lift,
+            "elbow_flex": elbow_flex,
+            "wrist_flex": wrist_flex,
+            "wrist_roll": wrist_roll,
+        }
+        if gripper is not None:
+            positions["gripper"] = gripper
+        backend = self._backend
+        if backend is not None and hasattr(backend, "arm_pose"):
+            result = backend.arm_pose(positions)
+            record = self._record(
+                "arm_pose", positions=positions, backend=backend.name, ok=result.ok
+            )
+            self._record_result(record, result)
+            print(f"[arm_pose] {positions}")
+            return result.message
+        self._record("arm_pose", positions=positions, backend=None, ok=False)
+        print(f"[arm_pose] {positions}")
+        return (
+            "No robot backend configured."
+            if backend is None
+            else "Backend does not support arm_pose."
+        )
+
     # ── Vision ─────────────────────────────────────────────────────────────
 
     def look(self) -> str:
@@ -714,6 +762,7 @@ class RobotTools:
             self.navigate,
             self.rotate,
             self.gripper,
+            self.arm_pose,
             self.look,
             self.remember,
             self.recall,

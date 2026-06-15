@@ -200,9 +200,16 @@ class RobotAgent:
         self, width: int = 320, quality: int = 70, drain_frames: int | None = None
     ) -> str | None:
         """Return a base64 JPEG from the camera, or None."""
+        flip = self.config.get("camera_flip")
+        if flip is not None:
+            flip = int(flip)
         with self._camera_lock:
             return capture_jpeg(
-                self._camera, width=width, quality=quality, drain_frames=drain_frames
+                self._camera,
+                width=width,
+                quality=quality,
+                drain_frames=drain_frames,
+                flip=flip,
             )
 
     # ── Core agentic loop ──────────────────────────────────────────────────
@@ -284,11 +291,6 @@ class RobotAgent:
         action_types = [a["type"] for a in self.tools.actions_taken]
         print(f"turn ({elapsed:.2f}s) | {' → '.join(action_types) or 'no actions'}")
 
-        # Execute queued speech after the full tool chain so audio doesn't
-        # interleave with ongoing LLM inference.
-        for text in self._pending_speech:
-            await self._speak(text)
-
         actions = list(self.tools.actions_taken)
         # A final plain-text reply (no tool call) is still an answer for the
         # operator — keep it instead of dropping it on the floor.
@@ -313,6 +315,9 @@ class RobotAgent:
             self.runtime.set_scene(scene, source="vision")
         self._action_log.extend(actions)
         self._record_turn_memory(event, actions)
+
+        # Broadcast immediately so text appears in the discussion tab before
+        # audio playback begins (which can take several seconds).
         self._broadcast(
             {
                 "source": event.get("source", "?"),
@@ -321,6 +326,11 @@ class RobotAgent:
                 "error": error,
             }
         )
+
+        # Execute queued speech after broadcast so the UI updates first.
+        for text in self._pending_speech:
+            await self._speak(text)
+
         return actions
 
     def _record_turn_memory(self, event: dict, actions: list[dict]):
@@ -368,6 +378,7 @@ class RobotAgent:
             if transcript:
                 content.append({"type": "text", "text": f"(voice) {transcript}"})
                 event["text"] = transcript
+                self._broadcast({"type": "mic_transcript", "text": transcript})
             else:
                 content.append({"type": "audio", "blob": event["audio"]})
         if event.get("image"):
@@ -499,6 +510,7 @@ class RobotAgent:
         try:
             language = self.config.get("language", "en")
             voice = "ff_siwis" if language == "fr" else "af_heart"
+            print(f"[tts] voice: {voice} (language={language})")
             pcm = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: self.tts_backend.generate(text, voice=voice)
             )

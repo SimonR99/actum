@@ -10,9 +10,12 @@ the same loop.
 from __future__ import annotations
 
 import base64
+import inspect
 import io
 import json
-from typing import Any, Callable
+import types
+import typing
+from typing import Any, Callable, Union
 
 from actum.inference.base import InferenceProvider, build_tool_schema
 
@@ -110,6 +113,7 @@ class OpenAIProvider(InferenceProvider):
             arguments = json.loads(raw_arguments or "{}")
             if not isinstance(arguments, dict):
                 arguments = {}
+            arguments = _coerce_tool_args(tool, arguments)
             return str(tool(**arguments))
         except Exception as exc:  # surface tool errors back to the model
             return f"Tool {name} failed: {exc}"
@@ -168,3 +172,37 @@ class OpenAIProvider(InferenceProvider):
 
 def _image_block(blob: str) -> dict[str, Any]:
     return {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{blob}"}}
+
+
+def _coerce_tool_args(tool: Callable, arguments: dict) -> dict:
+    """Coerce LLM-supplied argument values to their annotated Python types.
+
+    LLMs occasionally send numbers as JSON strings (e.g. "0.5" instead of 0.5).
+    Silently cast float/int annotations so tools don't crash on type mismatches.
+    """
+    try:
+        sig = inspect.signature(tool)
+    except (ValueError, TypeError):
+        return arguments
+
+    out = {}
+    for key, val in arguments.items():
+        param = sig.parameters.get(key)
+        if param is None or param.annotation is inspect.Parameter.empty:
+            out[key] = val
+            continue
+        ann = param.annotation
+        # Unwrap Optional / Union → first non-None member
+        origin = typing.get_origin(ann)
+        if origin is Union or isinstance(ann, types.UnionType):
+            members = [a for a in typing.get_args(ann) if a is not type(None)]
+            ann = members[0] if members else ann
+        try:
+            if ann is float and not isinstance(val, float):
+                val = float(val)
+            elif ann is int and not isinstance(val, int):
+                val = int(float(val))  # handle "2" and "2.0" both
+        except (ValueError, TypeError):
+            pass
+        out[key] = val
+    return out

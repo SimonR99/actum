@@ -126,6 +126,38 @@ _configure_alsa_default()
 # ── Camera ─────────────────────────────────────────────────────────────────────
 
 
+def _find_usb_camera() -> str | int:
+    """Return the first /dev/videoN that supports single-plane video capture.
+
+    Raspberry Pi exposes many /dev/video* nodes for its ISP pipeline and hardware
+    decoder; these are NOT capture devices and OpenCV rejects them. We filter by
+    checking the V4L2 device capabilities before returning a path.
+    """
+    import glob
+    import fcntl
+    import struct
+
+    # VIDIOC_QUERYCAP: driver[16] + card[32] + bus_info[32] + version[4] + capabilities[4]
+    # capabilities field is at byte offset 84 in the 104-byte struct.
+    # Only V4L2_CAP_VIDEO_CAPTURE (single-plane) is used here: USB webcams set this flag,
+    # while the Raspberry Pi ISP pipeline nodes (pispbe) only set the multiplane variant
+    # and are not usable as camera sources by OpenCV.
+    VIDIOC_QUERYCAP = 0x80685600
+    V4L2_CAP_VIDEO_CAPTURE = 0x00000001
+
+    for path in sorted(glob.glob("/dev/video*")):
+        try:
+            with open(path, "rb") as f:
+                buf = b"\x00" * 104
+                result = fcntl.ioctl(f, VIDIOC_QUERYCAP, buf)
+                caps = struct.unpack_from("<I", result, 84)[0]
+                if caps & V4L2_CAP_VIDEO_CAPTURE:
+                    return path
+        except OSError:
+            continue
+    return 0
+
+
 def open_camera(source: str | int | None = None):
     """Open a camera and return a cv2.VideoCapture object, or None on failure.
 
@@ -146,7 +178,7 @@ def open_camera(source: str | int | None = None):
         source = _env("ACTUM_CAMERA", "auto")
 
     if source == "auto":
-        source = "csi" if _is_jetson() else 0
+        source = "csi" if _is_jetson() else _find_usb_camera()
     if source == "usb":
         source = 0
     if source == "csi":
@@ -180,9 +212,16 @@ def open_camera(source: str | int | None = None):
 
 
 def capture_jpeg(
-    cam, width: int = 320, quality: int = 70, drain_frames: int | None = None
+    cam,
+    width: int = 320,
+    quality: int = 70,
+    drain_frames: int | None = None,
+    flip: int | None = None,
 ) -> str | None:
-    """Read one frame and return as base64-encoded JPEG, or None."""
+    """Read one frame and return as base64-encoded JPEG, or None.
+
+    flip: cv2.flip code — 0=vertical, 1=horizontal, -1=both, None=no flip.
+    """
     if cam is None:
         return None
     try:
@@ -195,6 +234,8 @@ def capture_jpeg(
         ok, frame = cam.read()
         if not ok:
             return None
+        if flip is not None:
+            frame = cv2.flip(frame, flip)
         h, w = frame.shape[:2]
         if w > width:
             frame = cv2.resize(frame, (width, int(h * width / w)))
@@ -472,13 +513,16 @@ class AudioCapture:
         on_speech: Callable[[str], None],
         sample_rate: int = SAMPLE_RATE,
         vad: Any = None,
+        on_level: Callable[[float, str], None] | None = None,
     ):
         self._on_speech = on_speech
+        self._on_level = on_level  # called as on_level(rms_0_1, state) at ~10 fps
         self._sample_rate = sample_rate
         self._chunk_frames = int(self._sample_rate * CHUNK_MS / 1000)
         self._vad = vad or build_default_vad()
         self._stop = threading.Event()
         self._muted = threading.Event()
+        self._level_tick = 0
 
     def pause(self):
         """Stop feeding audio to the VAD (e.g. while the robot speaks).
@@ -525,11 +569,25 @@ class AudioCapture:
             ) as stream:
                 while not self._stop.is_set():
                     chunk, _ = stream.read(chunk_frames)
-                    if self._muted.is_set():
-                        continue
-                    utterance = self._vad.process(chunk.flatten())
-                    if utterance is not None:
-                        self._on_speech(pcm_to_wav_b64(utterance, sample_rate))
+                    flat = chunk.flatten()
+                    muted = self._muted.is_set()
+                    if not muted:
+                        utterance = self._vad.process(flat)
+                        if utterance is not None:
+                            self._on_speech(pcm_to_wav_b64(utterance, sample_rate))
+                    if self._on_level:
+                        self._level_tick += 1
+                        if self._level_tick >= 3:  # ~90 ms → ~11 fps
+                            self._level_tick = 0
+                            rms = float(np.sqrt(np.mean(flat**2)))
+                            in_speech = getattr(self._vad, "_in_speech", False)
+                            if muted:
+                                state = "muted"
+                            elif in_speech:
+                                state = "speaking"
+                            else:
+                                state = "listening"
+                            self._on_level(min(rms * 12.0, 1.0), state)
 
         try:
             _run_stream(selected_rate)

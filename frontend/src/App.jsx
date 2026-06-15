@@ -183,6 +183,9 @@ function useActumState() {
   const [toast, setToast] = useState("");
   const [messages, setMessages] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const [micState, setMicState] = useState("listening");
+  const [micTranscript, setMicTranscript] = useState("");
   const latestFrameId = useRef(0);
   const latestFrameSentAt = useRef(0);
   const frameRaf = useRef(0);
@@ -247,6 +250,13 @@ function useActumState() {
             setLastFrameAt(new Date((sentAt || latestFrameSentAt.current) * 1000).toLocaleTimeString());
           });
         }
+        if (msg.type === "mic") {
+          setMicLevel(msg.level ?? 0);
+          setMicState(msg.state ?? "listening");
+        }
+        if (msg.type === "mic_transcript") {
+          setMicTranscript(msg.text ?? "");
+        }
         if (msg.type === "turn") {
           if (msg.ignored) {
             setBusy(false);
@@ -291,7 +301,10 @@ function useActumState() {
     pushMessage,
     clearMessages,
     busy,
-    setBusy
+    setBusy,
+    micLevel,
+    micState,
+    micTranscript
   };
 }
 
@@ -310,7 +323,10 @@ export default function App() {
     pushMessage,
     clearMessages,
     busy,
-    setBusy
+    setBusy,
+    micLevel,
+    micState,
+    micTranscript
   } = useActumState();
   const [rightView, setRightView] = useState("chat");
 
@@ -377,7 +393,7 @@ export default function App() {
           />
         </section>
 
-        <section className="grid min-h-0 animate-rise grid-cols-2 gap-5 max-[860px]:grid-cols-1" style={{ animationDelay: "210ms" }}>
+        <section className="grid min-h-0 animate-rise grid-cols-3 gap-5 max-[1100px]:grid-cols-2 max-[860px]:grid-cols-1" style={{ animationDelay: "210ms" }}>
           <div className="panel flex min-h-0 flex-col">
             <PanelHeader title={t("panel.toolgraph")} meta={`${state?.tool_graph?.length || 0} ${t("toolgraph.calls")}`} icon={Network} index="03" />
             <ToolGraph nodes={state?.tool_graph || []} />
@@ -385,6 +401,10 @@ export default function App() {
           <div className="panel flex min-h-0 flex-col">
             <PanelHeader title={t("panel.maptimeline")} meta="memory" icon={Map} index="04" />
             <MapTimeline state={state} />
+          </div>
+          <div className="panel flex min-h-0 flex-col">
+            <PanelHeader title={t("panel.mic")} meta={micState} icon={Mic2} index="05" />
+            <MicPanel level={micLevel} micState={micState} transcript={micTranscript} />
           </div>
         </section>
       </main>
@@ -940,6 +960,59 @@ function MapTimeline({ state }) {
             );
           })}
           {!events.length ? <Empty text={t("timeline.none")} /> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Mic Panel ──────────────────────────────────────────────────────────────────
+
+function MicPanel({ level, micState, transcript }) {
+  const { t } = useT();
+
+  const stateColors = {
+    listening: "bg-slate-400",
+    speaking: "bg-blue-500",
+    processing: "bg-amber-500",
+    muted: "bg-slate-300"
+  };
+  const barColor = stateColors[micState] || "bg-slate-400";
+
+  const stateLabels = {
+    listening: t("mic.listening"),
+    speaking: t("mic.speaking"),
+    processing: t("mic.processing"),
+    muted: t("mic.muted")
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 h-3 overflow-hidden rounded-full bg-slate-100">
+          <div
+            className={cx("absolute inset-y-0 left-0 rounded-full transition-all duration-75", barColor)}
+            style={{ width: `${Math.round(level * 100)}%` }}
+          />
+        </div>
+        <span className={cx(
+          "shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide",
+          micState === "speaking" ? "bg-blue-100 text-blue-700" :
+          micState === "processing" ? "bg-amber-100 text-amber-700" :
+          micState === "muted" ? "bg-slate-100 text-slate-400" :
+          "bg-slate-100 text-slate-500"
+        )}>
+          {stateLabels[micState] || micState}
+        </span>
+      </div>
+
+      <div className="min-h-0 flex-1">
+        <SectionTitle title={t("mic.transcript")} />
+        <div className={cx(
+          "mt-2 min-h-[60px] rounded-xl border p-3 text-sm leading-relaxed transition-colors",
+          transcript ? "border-blue-100 bg-blue-50/50 text-slate-800" : "border-slate-200 bg-slate-50 text-slate-400"
+        )}>
+          {transcript || t("mic.noTranscript")}
         </div>
       </div>
     </div>

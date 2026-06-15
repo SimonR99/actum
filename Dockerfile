@@ -50,6 +50,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libvulkan1 \
     && rm -rf /var/lib/apt/lists/*
 
+# Install CycloneDDS C library (required by unitree_sdk2py → cyclonedds Python binding)
+RUN git clone --depth 1 --branch 0.10.2 https://github.com/eclipse-cyclonedds/cyclonedds /tmp/cyclonedds \
+    && cmake -B /tmp/cyclonedds/build /tmp/cyclonedds -DCMAKE_INSTALL_PREFIX=/opt/cyclonedds \
+    && cmake --build /tmp/cyclonedds/build --target install -j$(nproc) \
+    && rm -rf /tmp/cyclonedds
+ENV CYCLONEDDS_HOME=/opt/cyclonedds
+
 # Create virtual environment
 RUN python3.10 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" \
@@ -68,12 +75,8 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 
 # Install project dependencies.
-# Bundle every stack so the container is self-contained with no host conflicts:
-#   camera  → OpenCV capture
-#   openai  → cloud inference provider (fast profile)
-#   whisper → local speech-to-text (default STT engine)
-#   mcp     → trusted external tool servers
-#   unitree → Unitree G1 robot backend (DDS-based locomotion)
+# lerobot (LeKiwi motor bus) is installed at container startup from /lerobot
+# if that volume is mounted — see docker/entrypoint.sh.
 RUN pip install -e ".[camera,openai,whisper,mcp,unitree]"
 
 # Ensure the cache directory exists even if no models are pre-downloaded
@@ -120,5 +123,8 @@ ENV MODEL_PATH=/root/.cache/huggingface/models--litert-community--gemma-4-E2B-it
 # Expose ports
 EXPOSE 8000
 
-# Default: run the monitoring server
+# Entrypoint installs lerobot from /lerobot if mounted (LeKiwi motor bus)
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["actum-server"]

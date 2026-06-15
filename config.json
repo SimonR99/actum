@@ -122,7 +122,7 @@
     "_consolidate_seconds_comment": "How often the robot auto-organises memory (dedupe/trim). 0 disables."
   },
   "robot": {
-    "backend": "laptop",
+    "backend": "lekiwi",
     "_backend_options": "laptop | fake | unitree_g1 | lekiwi",
     "laptop": {
       "webcam": true,
@@ -136,9 +136,16 @@
       "volume": 80
     },
     "lekiwi": {
-      "remote_ip": "127.0.0.1",
-      "port": 5555,
-      "id": "lekiwi"
+      "serial_port": "/dev/ttyACM0"
+    },
+    "ros2": {
+      "node_name": "actum_node",
+      "cmd_vel_topic": "/cmd_vel",
+      "odom_topic": "/odom",
+      "joint_states_topic": "/joint_states",
+      "gripper_topic": "/gripper_cmd",
+      "linear_speed": 0.25,
+      "angular_speed": 0.5
     }
   },
   "mcp": {
@@ -146,5 +153,6 @@
     "_comment": "Enable only trusted MCP servers. Install with: pip install -e .[mcp]",
     "servers": {}
   },
-  "language": "en"
+  "language": "fr",
+  "camera_flip": -1
 }

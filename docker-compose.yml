@@ -13,15 +13,8 @@ services:
     image: actum:latest
     container_name: actum-agent
     
-    # GPU support (requires nvidia-docker or Docker 20.10+)
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    
+    # GPU support is injected at runtime by run-server.sh when nvidia-smi is available.
+
     # API keys (OPENAI_API_KEY, …) loaded from the project .env if present.
     env_file:
       - path: .env
@@ -36,15 +29,12 @@ services:
       # Audio device (adjust if needed: hw:1,0 for different card)
       - ACTUM_AUDIO_DEVICE=plughw:2,0
       # Camera mode: auto, csi, usb, or device index
-      - ACTUM_CAMERA=usb
-      # Route container audio to the host PulseAudio/PipeWire sound server
-      - PULSE_SERVER=unix:/tmp/pulse-socket
+      - ACTUM_CAMERA=auto
+      # PULSE_SERVER is injected at runtime by run-server.sh if PulseAudio is present
     
-    # Grant device cgroup permissions for speaker/camera
-    devices:
-      - "/dev/snd:/dev/snd"
-      - "/dev/video0:/dev/video0"
-      - "/dev/video1:/dev/video1"
+    # All hardware devices (/dev/snd, /dev/video*) and the PulseAudio socket are
+    # injected at runtime by run-server.sh so the container works on any robot
+    # regardless of which devices are present on a given host.
 
     # Volumes for persistence + hardware access
     volumes:
@@ -57,22 +47,19 @@ services:
       # Agent memory + logs
       - ./logs:/workspace/logs
       
-      # PulseAudio socket mount
-      - /run/user/1000/pulse/native:/tmp/pulse-socket
+      # PulseAudio socket is injected at runtime by run-server.sh if present
       
       # Hardware access (if robot is on same host)
       # Uncomment to enable hardware bridge
       # - /dev/ttyUSB0:/dev/ttyUSB0  # Serial ports (adjust as needed)
-      - /dev/snd:/dev/snd            # Audio devices
-      - /dev/video0:/dev/video0      # Camera device (USB or CSI)
     
-    # Ports: in network_mode: host, ports mapping is not needed as the container
-    # shares the host network namespace.
-    # ports:
-    #   - "8000:8000"  # Web dashboard (headless mode: not used)
-    
-    # Allow container to access host network (essential for CycloneDDS multicast communication)
-    network_mode: host
+    # Port mapping for bridge networking (default).
+    # run-server.sh overrides to network_mode: host for Unitree robots, which
+    # need host networking for CycloneDDS multicast — but host networking breaks
+    # /sys/devices/system/cpu/possible on some kernels (Raspberry Pi 6.8.x),
+    # causing onnxruntime to crash.
+    ports:
+      - "8000:8000"
     
     # Interactive terminal (for text input)
     stdin_open: true

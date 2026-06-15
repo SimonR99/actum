@@ -597,9 +597,22 @@ async def lifespan(app: FastAPI):
             frame = agent.capture_frame()
             if frame:
                 event["image"] = frame
+            # Signal processing state to the dashboard before queuing
+            loop.call_soon_threadsafe(
+                lambda: agent._broadcast(
+                    {"type": "mic", "level": 0.0, "state": "processing"}
+                )
+            )
             loop.call_soon_threadsafe(agent.event_bus.put_nowait, event)
 
-        mic = AudioCapture(on_speech)
+        def on_level(level: float, state: str):
+            loop.call_soon_threadsafe(
+                lambda: agent._broadcast(
+                    {"type": "mic", "level": level, "state": state}
+                )
+            )
+
+        mic = AudioCapture(on_speech, on_level=on_level)
         app.state.mic = mic
         agent.mic = mic
         threading.Thread(target=mic.run, daemon=True).start()
