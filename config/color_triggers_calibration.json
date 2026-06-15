@@ -10,40 +10,86 @@
         "v_min": 110,
         "v_max": 255
       },
-      "reference_bgr": [207, 119, 31]
+      "reference_bgr": [
+        207,
+        119,
+        31
+      ]
+    },
+    "yellow": {
+      "hsv_range": {
+        "h_min": 30,
+        "h_max": 60,
+        "s_min": 65,
+        "s_max": 255,
+        "v_min": 105,
+        "v_max": 255
+      },
+      "reference_bgr": [
+        113,
+        203,
+        167
+      ]
+    },
+    "green": {
+      "hsv_range": {
+        "h_min": 67,
+        "h_max": 91,
+        "s_min": 110,
+        "s_max": 255,
+        "v_min": 105,
+        "v_max": 255
+      },
+      "reference_bgr": [
+        144,
+        208,
+        34
+      ]
     },
     "orange": {
       "hsv_range": {
-        "h_min": 0,
+        "h_min": 170,
         "h_max": 18,
-        "s_min": 100,
+        "s_min": 80,
         "s_max": 255,
-        "v_min": 175,
+        "v_min": 170,
         "v_max": 255
       },
-      "reference_bgr": [117, 139, 252]
+      "reference_bgr": [
+        117,
+        139,
+        252
+      ]
     },
     "purple": {
       "hsv_range": {
-        "h_min": 140,
+        "h_min": 134,
         "h_max": 156,
-        "s_min": 100,
+        "s_min": 95,
         "s_max": 255,
-        "v_min": 100,
+        "v_min": 95,
         "v_max": 255
       },
-      "reference_bgr": [171, 59, 164]
+      "reference_bgr": [
+        171,
+        59,
+        164
+      ]
     },
     "pink": {
       "hsv_range": {
         "h_min": 156,
         "h_max": 173,
-        "s_min": 100,
+        "s_min": 95,
         "s_max": 255,
-        "v_min": 150,
+        "v_min": 140,
         "v_max": 255
       },
-      "reference_bgr": [172, 91, 242]
+      "reference_bgr": [
+        172,
+        91,
+        242
+      ]
     },
     "black": {
       "hsv_range": {
@@ -54,15 +100,40 @@
         "v_min": 0,
         "v_max": 50
       },
-      "reference_bgr": [0, 0, 0]
+      "reference_bgr": [
+        0,
+        0,
+        0
+      ]
     }
   },
   "combinations": {
-    "group-1": ["purple", "blue", "pink"],
-    "group-2": ["purple", "blue", "orange"],
-    "group-3": ["purple", "pink", "orange"],
-    "group-4": ["blue", "pink", "orange"],
-    "group-5": ["purple", "blue", "pink", "orange"]
+    "group-1": [
+      "purple",
+      "blue",
+      "pink"
+    ],
+    "group-2": [
+      "purple",
+      "blue",
+      "orange"
+    ],
+    "group-3": [
+      "purple",
+      "pink",
+      "orange"
+    ],
+    "group-4": [
+      "blue",
+      "pink",
+      "orange"
+    ],
+    "group-5": [
+      "purple",
+      "blue",
+      "pink",
+      "orange"
+    ]
   },
   "detection": {
     "min_segment_width_px": 8,
@@ -70,6 +141,7 @@
     "min_band_colors": 3,
     "require_black_separators": false,
     "roi_y_center_ratio": 0.5,
+    "roi_width_ratio": 1.0,
     "scan_line_length_ratio": 0.6,
     "position_search_enabled": true,
     "angle_search_enabled": true
