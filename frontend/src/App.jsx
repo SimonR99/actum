@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Mic2,
   Network,
+  Palette,
   RotateCcw,
   Save,
   Send,
@@ -383,6 +384,7 @@ export default function App() {
             view={rightView}
             setView={setRightView}
             state={state}
+            frame={frame}
             showToast={showToast}
             refresh={refresh}
             messages={messages}
@@ -494,10 +496,11 @@ function PanelHeader({ title, meta, icon: Icon, right, index }) {
 
 // ── Right rail: Chat + Settings ────────────────────────────────────────────────
 
-function RightRail({ view, setView, state, showToast, refresh, messages, pushMessage, clearMessages, busy, setBusy }) {
+function RightRail({ view, setView, state, frame, showToast, refresh, messages, pushMessage, clearMessages, busy, setBusy }) {
   const { t } = useT();
   const tabs = [
     { id: "chat", label: t("panel.chat"), icon: MessageSquare },
+    { id: "ozobot", label: t("panel.ozobot"), icon: Palette },
     { id: "settings", label: t("panel.settings"), icon: Settings }
   ];
   return (
@@ -521,7 +524,9 @@ function RightRail({ view, setView, state, showToast, refresh, messages, pushMes
             );
           })}
         </div>
-        <div className="panel-meta">{view === "chat" ? t("panel.console") : t("settings.operator")}</div>
+        <div className="panel-meta">
+          {view === "chat" ? t("panel.console") : view === "ozobot" ? t("ozobot.title") : t("settings.operator")}
+        </div>
       </div>
       {view === "chat" ? (
         <ChatPanel
@@ -534,6 +539,8 @@ function RightRail({ view, setView, state, showToast, refresh, messages, pushMes
           busy={busy}
           setBusy={setBusy}
         />
+      ) : view === "ozobot" ? (
+        <OzobotColorsPanel frame={frame} showToast={showToast} />
       ) : (
         <SettingsPanel state={state} showToast={showToast} refresh={refresh} />
       )}
@@ -1014,6 +1021,247 @@ function MicPanel({ level, micState, transcript }) {
         )}>
           {transcript || t("mic.noTranscript")}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Ozobot color triggers ──────────────────────────────────────────────────────
+
+const OZOBOT_ACTION_PRESETS = {
+  forward: { type: "drive", direction: "forward", distance_m: 0.3 },
+  left: { type: "rotate", degrees: -90 },
+  right: { type: "rotate", degrees: 90 },
+  wave: { type: "gesture", name: "wave" },
+  speak: { type: "speak", text: "Color group detected." },
+  none: null
+};
+
+const DEFAULT_OZOBOT_ACTIONS = {
+  "group-1": OZOBOT_ACTION_PRESETS.forward,
+  "group-2": OZOBOT_ACTION_PRESETS.left,
+  "group-3": OZOBOT_ACTION_PRESETS.right,
+  "group-4": OZOBOT_ACTION_PRESETS.wave
+};
+
+function actionPresetKey(action) {
+  if (!action) return "none";
+  if (action.type === "drive" && action.direction === "forward") return "forward";
+  if (action.type === "rotate" && Number(action.degrees) < 0) return "left";
+  if (action.type === "rotate" && Number(action.degrees) > 0) return "right";
+  if (action.type === "gesture") return "wave";
+  if (action.type === "speak") return "speak";
+  return "forward";
+}
+
+function bgrCss(bgr) {
+  const [b, g, r] = bgr || [128, 128, 128];
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function OzobotColorsPanel({ frame, showToast }) {
+  const { t } = useT();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const [groups, setGroups] = useState({});
+  const [actions, setActions] = useState({ ...DEFAULT_OZOBOT_ACTIONS });
+  const [detection, setDetection] = useState(null);
+  const [available, setAvailable] = useState(true);
+  const [error, setError] = useState("");
+
+  const matchedGroups = detection?.matched_combinations || [];
+  const activeGroup = matchedGroups[0] || "";
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const payload = await api("/color-triggers");
+        if (cancelled) return;
+        setAvailable(Boolean(payload.available));
+        setError(payload.error || "");
+        setEnabled(Boolean(payload.enabled));
+        setGroups(payload.groups || {});
+        const nextActions = { ...DEFAULT_OZOBOT_ACTIONS };
+        for (const [name, group] of Object.entries(payload.groups || {})) {
+          if (group.action) nextActions[name] = group.action;
+        }
+        setActions(nextActions);
+      } catch (err) {
+        if (!cancelled) setError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!available) return undefined;
+    let cancelled = false;
+    async function poll() {
+      try {
+        const payload = await api("/color-triggers/detect");
+        if (!cancelled && payload.ok) setDetection(payload.detection || null);
+      } catch {
+        // Detection polling is best-effort while the camera warms up.
+      }
+    }
+    poll();
+    const timer = window.setInterval(poll, 400);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [available]);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const payload = await api("/color-triggers", {
+        method: "POST",
+        body: JSON.stringify({ enabled, actions, persist: true })
+      });
+      setEnabled(Boolean(payload.enabled));
+      setGroups(payload.groups || {});
+      showToast(payload.message || t("ozobot.saved"));
+    } catch (err) {
+      showToast(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function updateAction(groupName, presetKey) {
+    setActions((current) => ({
+      ...current,
+      [groupName]: OZOBOT_ACTION_PRESETS[presetKey] || null
+    }));
+  }
+
+  const presetOptions = [
+    { id: "forward", label: t("ozobot.action.forward") },
+    { id: "left", label: t("ozobot.action.left") },
+    { id: "right", label: t("ozobot.action.right") },
+    { id: "wave", label: t("ozobot.action.wave") },
+    { id: "speak", label: t("ozobot.action.speak") },
+    { id: "none", label: t("ozobot.action.none") }
+  ];
+
+  if (loading) {
+    return <div className="grid flex-1 place-items-center p-6 text-sm text-slate-500">{t("ozobot.detecting")}</div>;
+  }
+
+  if (!available) {
+    return (
+      <div className="grid flex-1 place-items-center p-6 text-center text-sm text-slate-500">
+        {error || t("ozobot.unavailable")}
+      </div>
+    );
+  }
+
+  const groupNames = Object.keys(groups).length
+    ? Object.keys(groups).sort()
+    : Object.keys(DEFAULT_OZOBOT_ACTIONS);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
+      <div>
+        <div className="text-sm font-semibold text-slate-900">{t("ozobot.title")}</div>
+        <div className="mt-1 text-xs leading-relaxed text-slate-500">{t("ozobot.subtitle")}</div>
+      </div>
+
+      <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-slate-300 bg-slate-950 shadow-inner ring-1 ring-black/5">
+        {frame ? (
+          <img className="h-full w-full object-contain" src={frame} alt="Live camera for color detection" />
+        ) : (
+          <div className="grid h-full place-items-center gap-2 text-center">
+            <Camera className="mx-auto h-6 w-6 text-slate-600" />
+            <span className="font-mono text-[11px] uppercase tracking-label text-slate-500">{t("ozobot.noCamera")}</span>
+          </div>
+        )}
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-3 py-3 text-white">
+          {activeGroup ? (
+            <div className="text-sm font-semibold">
+              {t("ozobot.matched")}: {activeGroup}
+            </div>
+          ) : (
+            <div className="text-sm font-medium text-white/80">{t("ozobot.noBand")}</div>
+          )}
+          {detection?.colors_sequence?.length ? (
+            <div className="mt-1 font-mono text-[10px] uppercase tracking-label text-white/70">
+              {t("ozobot.colorsSeen")}: {detection.colors_sequence.join(" · ")}
+              {detection.confidence ? ` · ${Math.round(detection.confidence * 100)}% ${t("ozobot.confidence")}` : ""}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid gap-3">
+        {groupNames.map((groupName) => {
+          const group = groups[groupName] || {};
+          const isActive = activeGroup === groupName;
+          const action = actions[groupName];
+          return (
+            <div
+              key={groupName}
+              className={cx(
+                "rounded-xl border p-3 transition",
+                isActive ? "border-emerald-300 bg-emerald-50 ring-1 ring-emerald-100" : "border-slate-200 bg-white"
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-900">
+                    {t("ozobot.group")} {groupName.replace("group-", "")}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {(group.swatches || []).map((swatch) => (
+                      <span
+                        key={`${groupName}-${swatch.name}`}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600"
+                      >
+                        <span className="h-3 w-3 rounded-full border border-black/10" style={{ backgroundColor: bgrCss(swatch.bgr) }} />
+                        {swatch.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {isActive ? (
+                  <span className="shrink-0 rounded-md border border-emerald-200 bg-emerald-100 px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-label text-emerald-800">
+                    live
+                  </span>
+                ) : null}
+              </div>
+              <label className="mt-3 block">
+                <span className="mono-label mb-1 block normal-case text-slate-500">{t("ozobot.action")}</span>
+                <select
+                  className="field"
+                  value={actionPresetKey(action)}
+                  onChange={(event) => updateAction(groupName, event.target.value)}
+                >
+                  {presetOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-auto grid gap-3 border-t border-slate-200 pt-4">
+        <Toggle label={t("ozobot.enabled")} checked={enabled} onChange={setEnabled} />
+        <button className="btn-primary" disabled={saving} onClick={save}>
+          <Save className="h-4 w-4" />
+          {saving ? t("ozobot.detecting") : t("ozobot.save")}
+        </button>
       </div>
     </div>
   );

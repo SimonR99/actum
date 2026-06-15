@@ -28,6 +28,7 @@ export const STRINGS = {
     "panel.mic": "Microphone",
     "panel.console": "Console",
     "panel.chat": "Discussion",
+    "panel.ozobot": "Couleurs Ozobot",
     // mic panel
     "mic.listening": "écoute",
     "mic.speaking": "parole",
@@ -164,7 +165,28 @@ export const STRINGS = {
     "toast.speechUpdated": "Reconnaissance vocale mise à jour",
     "toast.languageUpdated": "Langue de l'agent mise à jour",
     "toast.scheduled": "Planifié",
-    "toast.passiveIgnored": "Événement passif ignoré"
+    "toast.passiveIgnored": "Événement passif ignoré",
+    // ozobot colors
+    "ozobot.title": "Détection de couleurs",
+    "ozobot.subtitle": "Configurez une action par groupe et surveillez la caméra en direct.",
+    "ozobot.enabled": "Déclencheurs actifs",
+    "ozobot.save": "Enregistrer",
+    "ozobot.noCamera": "Caméra indisponible",
+    "ozobot.detecting": "Analyse en cours…",
+    "ozobot.noBand": "Aucune bande détectée",
+    "ozobot.matched": "Groupe détecté",
+    "ozobot.colorsSeen": "Couleurs vues",
+    "ozobot.confidence": "confiance",
+    "ozobot.action": "Action",
+    "ozobot.group": "Groupe",
+    "ozobot.unavailable": "Module couleur indisponible (actum[camera])",
+    "ozobot.saved": "Réglages Ozobot enregistrés",
+    "ozobot.action.forward": "Avancer",
+    "ozobot.action.left": "Tourner à gauche",
+    "ozobot.action.right": "Tourner à droite",
+    "ozobot.action.wave": "Agiter le bras",
+    "ozobot.action.speak": "Parler",
+    "ozobot.action.none": "Aucune"
   },
   en: {
     "app.subtitle": "Always-on autonomy console",
@@ -183,6 +205,7 @@ export const STRINGS = {
     "panel.mic": "Microphone",
     "panel.console": "Console",
     "panel.chat": "Chat",
+    "panel.ozobot": "Ozobot Colors",
     // mic panel
     "mic.listening": "listening",
     "mic.speaking": "speaking",
@@ -305,7 +328,28 @@ export const STRINGS = {
     "toast.speechUpdated": "Speech recognition updated",
     "toast.languageUpdated": "Agent language updated",
     "toast.scheduled": "Scheduled",
-    "toast.passiveIgnored": "Passive event ignored"
+    "toast.passiveIgnored": "Passive event ignored",
+    // ozobot colors
+    "ozobot.title": "Color detection",
+    "ozobot.subtitle": "Bind an action to each color group and watch the live camera feed.",
+    "ozobot.enabled": "Triggers enabled",
+    "ozobot.save": "Save",
+    "ozobot.noCamera": "Camera unavailable",
+    "ozobot.detecting": "Scanning…",
+    "ozobot.noBand": "No color band detected",
+    "ozobot.matched": "Group detected",
+    "ozobot.colorsSeen": "Colors seen",
+    "ozobot.confidence": "confidence",
+    "ozobot.action": "Action",
+    "ozobot.group": "Group",
+    "ozobot.unavailable": "Color module unavailable (install actum[camera])",
+    "ozobot.saved": "Ozobot settings saved",
+    "ozobot.action.forward": "Move forward",
+    "ozobot.action.left": "Turn left",
+    "ozobot.action.right": "Turn right",
+    "ozobot.action.wave": "Wave arm",
+    "ozobot.action.speak": "Speak",
+    "ozobot.action.none": "None"
   }
 };
 

@@ -31,6 +31,9 @@ class TriggerAction:
         params = {k: v for k, v in data.items() if k != "type"}
         return cls(type=action_type, params=params)
 
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": self.type, **self.params}
+
 
 @dataclass
 class ColorTriggerConfig:
@@ -61,6 +64,19 @@ class ColorTriggerConfig:
             show_debug=bool(data.get("show_debug", False)),
             actions=actions,
         )
+
+    def to_dict(self, calibration_path: str | None = None) -> dict[str, Any]:
+        calibration = calibration_path or self.calibration_path
+        return {
+            "enabled": self.enabled,
+            "calibration": calibration,
+            "detect_every_frames": self.detect_every_frames,
+            "cooldown_seconds": self.cooldown_seconds,
+            "show_debug": self.show_debug,
+            "actions": {
+                group: action.to_dict() for group, action in self.actions.items()
+            },
+        }
 
 
 def load_trigger_config(path: Path) -> ColorTriggerConfig:

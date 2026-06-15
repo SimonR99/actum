@@ -1,6 +1,7 @@
 """HTTP surface validation: readiness gating, command queueing, conversation reset."""
 
 import json
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -111,3 +112,39 @@ def test_state_snapshot_includes_scene_and_profile(client):
     assert state["scene"]["summary"] == "Desk with a laptop."
     assert state["profile"]["active"]
     assert state["backend"] == "fake"
+
+
+def test_color_triggers_get_and_post(client, tmp_path):
+    http, agent, app = client
+    repo_root = Path(__file__).resolve().parents[1]
+    cal_src = repo_root / "config" / "color_triggers_calibration.json"
+    config_dir = agent._config_path.parent / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "color_triggers_calibration.json").write_text(
+        cal_src.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+
+    payload = http.get("/color-triggers").json()
+    assert payload["available"] is True
+    assert "group-1" in payload["groups"]
+    assert payload["groups"]["group-1"]["colors"]
+
+    response = http.post(
+        "/color-triggers",
+        json={
+            "enabled": True,
+            "actions": {
+                "group-1": {"type": "drive", "direction": "forward", "distance_m": 0.3},
+                "group-2": {"type": "rotate", "degrees": -90},
+                "group-3": {"type": "rotate", "degrees": 90},
+                "group-4": {"type": "gesture", "name": "wave"},
+            },
+            "persist": True,
+        },
+    )
+    assert response.status_code == 200
+    saved = response.json()
+    assert saved["ok"] is True
+    assert saved["enabled"] is True
+    assert saved["groups"]["group-2"]["action"]["degrees"] == -90
+    assert agent._color_trigger_watcher is not None

@@ -241,27 +241,193 @@ class RobotAgent:
                 frame = cv2.flip(frame, int(flip))
             return frame
 
+    def _color_triggers_file(self) -> Path:
+        return self._config_path.parent / "config" / "color_triggers.json"
+
+    def _resolve_color_trigger_config(self):
+        from actum.color_triggers.actions import ColorTriggerConfig
+        from actum.color_triggers.watcher import load_merged_config
+
+        trigger_data = self.config.get("color_triggers")
+        if not isinstance(trigger_data, dict):
+            trigger_data = {}
+        return load_merged_config(
+            self._color_triggers_file(),
+            trigger_data,
+            self._config_path.parent,
+        )
+
+    def _restart_color_triggers(self):
+        if self._color_trigger_watcher is not None:
+            self._color_trigger_watcher.stop()
+            self._color_trigger_watcher = None
+        self._start_color_triggers()
+
     def _start_color_triggers(self):
         """Start the color-group trigger watcher when enabled in config."""
-        trigger_cfg = self.config.get("color_triggers")
-        if not isinstance(trigger_cfg, dict) or not trigger_cfg.get("enabled"):
-            return
         try:
             from actum.color_triggers.watcher import ColorTriggerWatcher
         except ImportError:
             print("[color_trigger] module unavailable (install actum[camera])")
             return
 
-        watcher = ColorTriggerWatcher.from_agent_config(
-            self.config,
+        cfg = self._resolve_color_trigger_config()
+        if not cfg.enabled:
+            return
+
+        watcher = ColorTriggerWatcher(
+            cfg,
             frame_reader=self.read_frame_bgr,
             backend=self.runtime.backend,
-            config_path=self._config_path,
         )
-        if watcher is None:
-            return
         watcher.start()
         self._color_trigger_watcher = watcher
+
+    def get_color_trigger_state(self) -> dict[str, Any]:
+        """Return color-trigger config, calibration groups, and last detection."""
+        try:
+            from actum.color_triggers.library import (
+                load_color_library,
+                preview_bgr_for_entry,
+            )
+        except ImportError:
+            return {
+                "available": False,
+                "error": "Color triggers require actum[camera] (opencv-python-headless).",
+            }
+
+        cfg = self._resolve_color_trigger_config()
+        calibration_path = Path(cfg.calibration_path)
+        groups: dict[str, dict[str, Any]] = {}
+        try:
+            library = load_color_library(calibration_path)
+            for name, combination in library.combinations.items():
+                swatches = []
+                for color_name in combination.colors:
+                    entry = library.colors.get(color_name)
+                    bgr = list(preview_bgr_for_entry(entry)) if entry else [128, 128, 128]
+                    swatches.append({"name": color_name, "bgr": bgr})
+                action = cfg.actions.get(name)
+                groups[name] = {
+                    "colors": list(combination.colors),
+                    "swatches": swatches,
+                    "action": action.to_dict() if action else None,
+                }
+        except Exception as exc:
+            return {"available": False, "error": f"Failed to load calibration: {exc}"}
+
+        last_detection = None
+        if self._color_trigger_watcher and self._color_trigger_watcher.last_result:
+            last_detection = self._color_trigger_watcher.last_result.to_dict()
+
+        rel_calibration = cfg.calibration_path
+        try:
+            rel_calibration = str(
+                calibration_path.resolve().relative_to(self._config_path.parent)
+            )
+        except ValueError:
+            pass
+
+        return {
+            "available": True,
+            "enabled": cfg.enabled,
+            "config": cfg.to_dict(calibration_path=rel_calibration),
+            "groups": groups,
+            "last_detection": last_detection,
+            "camera_open": self._camera is not None,
+        }
+
+    def detect_color_groups(self) -> dict[str, Any]:
+        """Run one color-group detection pass on the current camera frame."""
+        try:
+            from actum.color_triggers.detector import BandDetector
+        except ImportError:
+            return {
+                "ok": False,
+                "error": "Color triggers require actum[camera] (opencv-python-headless).",
+            }
+
+        frame = self.read_frame_bgr()
+        if frame is None:
+            return {"ok": False, "error": "Camera frame unavailable."}
+
+        cfg = self._resolve_color_trigger_config()
+        detector = BandDetector(calibration_path=cfg.calibration_path)
+        result = detector.detect(frame)
+        if self._color_trigger_watcher is not None:
+            self._color_trigger_watcher.last_result = result
+        return {"ok": True, "detection": result.to_dict()}
+
+    def set_color_trigger_settings(
+        self,
+        *,
+        enabled: bool | None = None,
+        actions: dict[str, dict[str, Any]] | None = None,
+        detect_every_frames: int | None = None,
+        cooldown_seconds: float | None = None,
+        persist: bool = True,
+    ) -> tuple[bool, str]:
+        """Update color-trigger actions and optionally start/stop the watcher."""
+        try:
+            from actum.color_triggers.actions import ColorTriggerConfig, TriggerAction
+        except ImportError:
+            return False, "Color triggers require actum[camera] (opencv-python-headless)."
+
+        cfg = self._resolve_color_trigger_config()
+        if enabled is not None:
+            cfg.enabled = bool(enabled)
+        if detect_every_frames is not None:
+            cfg.detect_every_frames = max(1, int(detect_every_frames))
+        if cooldown_seconds is not None:
+            cfg.cooldown_seconds = max(0.0, float(cooldown_seconds))
+        if actions is not None:
+            parsed: dict[str, TriggerAction] = {}
+            for group_name, payload in actions.items():
+                if payload:
+                    parsed[str(group_name)] = TriggerAction.from_dict(payload)
+            cfg.actions = parsed
+
+        rel_calibration = cfg.calibration_path
+        try:
+            rel_calibration = str(
+                Path(cfg.calibration_path).resolve().relative_to(
+                    self._config_path.parent
+                )
+            )
+        except ValueError:
+            pass
+
+        actions_path = self._color_triggers_file()
+        actions_path.parent.mkdir(parents=True, exist_ok=True)
+        actions_path.write_text(
+            json.dumps(cfg.to_dict(calibration_path=rel_calibration), indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        trigger_data = self.config.setdefault("color_triggers", {})
+        if not isinstance(trigger_data, dict):
+            trigger_data = {}
+            self.config["color_triggers"] = trigger_data
+        trigger_data["enabled"] = cfg.enabled
+        if detect_every_frames is not None:
+            trigger_data["detect_every_frames"] = cfg.detect_every_frames
+        if cooldown_seconds is not None:
+            trigger_data["cooldown_seconds"] = cfg.cooldown_seconds
+
+        if persist:
+            try:
+                _persist_config_updates(
+                    self._config_path, {"color_triggers": trigger_data}
+                )
+            except Exception as exc:
+                return (
+                    False,
+                    f"Color triggers updated in memory but failed to save config: {exc}",
+                )
+
+        self._restart_color_triggers()
+        status = "enabled" if cfg.enabled else "disabled"
+        return True, f"Color triggers saved ({status})."
 
     # ── Core agentic loop ──────────────────────────────────────────────────
 

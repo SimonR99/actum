@@ -11,6 +11,7 @@ export default defineConfig({
       "/trigger": "http://localhost:8000",
       "/cron": "http://localhost:8000",
       "/command": "http://localhost:8000",
+      "/color-triggers": "http://localhost:8000",
       "/events": {
         target: "ws://localhost:8000",
         ws: true

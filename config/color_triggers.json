@@ -6,22 +6,21 @@
   "show_debug": false,
   "actions": {
     "group-1": {
-      "type": "speak",
-      "text": "Group one detected."
-    },
-    "group-2": {
       "type": "drive",
       "direction": "forward",
       "distance_m": 0.3
+    },
+    "group-2": {
+      "type": "rotate",
+      "degrees": -90
     },
     "group-3": {
       "type": "rotate",
       "degrees": 90
     },
     "group-4": {
-      "type": "drive",
-      "direction": "backward",
-      "distance_m": 0.2
+      "type": "gesture",
+      "name": "wave"
     },
     "group-5": {
       "type": "speak",

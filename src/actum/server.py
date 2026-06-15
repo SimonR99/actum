@@ -404,6 +404,35 @@ def attach_server(agent: RobotAgent, app: FastAPI):
             status_code=200 if ok else 400,
         )
 
+    @app.get("/color-triggers")
+    async def color_triggers_get():
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, agent.get_color_trigger_state)
+
+    @app.get("/color-triggers/detect")
+    async def color_triggers_detect():
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, agent.detect_color_groups)
+
+    @app.post("/color-triggers")
+    async def color_triggers_post(body: dict):
+        loop = asyncio.get_running_loop()
+        ok, message = await loop.run_in_executor(
+            None,
+            lambda: agent.set_color_trigger_settings(
+                enabled=body.get("enabled") if "enabled" in body else None,
+                actions=body.get("actions") if "actions" in body else None,
+                detect_every_frames=body.get("detect_every_frames"),
+                cooldown_seconds=body.get("cooldown_seconds"),
+                persist=bool(body.get("persist", True)),
+            ),
+        )
+        state = await loop.run_in_executor(None, agent.get_color_trigger_state)
+        return JSONResponse(
+            {"ok": ok, "message": message, **state},
+            status_code=200 if ok else 400,
+        )
+
     @app.post("/conversation/reset")
     async def conversation_reset():
         not_ready = _not_ready_response(app)
