@@ -34,6 +34,7 @@ dependencies = [
 #   x86/macOS:  pip install actum[camera]
 #   Jetson:     sudo apt install python3-opencv  (comes with GStreamer support)
 camera = ["opencv-python-headless>=4.8.0"]
+color_triggers = ["opencv-python-headless>=4.8.0"]
 dev = ["pytest>=8.0"]
 # Cloud inference provider (used by the "fast" speed profile).
 openai = ["openai>=1.40.0"]
@@ -49,6 +50,7 @@ policies = ["lerobot>=0.5.1"]
 [project.scripts]
 actum        = "actum.agent:cli"
 actum-server = "actum.server:cli"
+actum-color-triggers = "actum.color_triggers.cli:main"
 
 [build-system]
 requires = ["hatchling"]

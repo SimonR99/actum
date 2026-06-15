@@ -159,5 +159,10 @@
     "servers": {}
   },
   "language": "fr",
-  "camera_flip": -1
+  "camera_flip": -1,
+  "color_triggers": {
+    "enabled": false,
+    "actions_file": "config/color_triggers.json",
+    "_comment": "Maps detected color groups (pink/blue/orange/purple) to speak/drive/rotate actions. Run scripts/color_triggers.py to test."
+  }
 }

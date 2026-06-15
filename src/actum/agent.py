@@ -132,6 +132,7 @@ class RobotAgent:
         # goal forward without the model finishing it.
         self._continued_goal = ""
         self._continuation_attempts = 0
+        self._color_trigger_watcher = None
 
     # ── Startup / shutdown ─────────────────────────────────────────────────
 
@@ -154,6 +155,7 @@ class RobotAgent:
 
         self._camera = open_camera()
         self._init_backend()
+        self._start_color_triggers()
         print("Robot agent ready.")
 
     def _rebuild_provider(self):
@@ -186,6 +188,9 @@ class RobotAgent:
         return frame
 
     def shutdown(self):
+        if self._color_trigger_watcher is not None:
+            self._color_trigger_watcher.stop()
+            self._color_trigger_watcher = None
         if self.provider:
             self.provider.close()
         if self._camera:
@@ -218,6 +223,45 @@ class RobotAgent:
                 drain_frames=drain_frames,
                 flip=flip,
             )
+
+    def read_frame_bgr(self):
+        """Return a raw BGR numpy frame from the camera, or None."""
+        if self._camera is None:
+            return None
+        try:
+            import cv2
+        except ImportError:
+            return None
+        flip = self.config.get("camera_flip")
+        with self._camera_lock:
+            ok, frame = self._camera.read()
+            if not ok:
+                return None
+            if flip is not None:
+                frame = cv2.flip(frame, int(flip))
+            return frame
+
+    def _start_color_triggers(self):
+        """Start the color-group trigger watcher when enabled in config."""
+        trigger_cfg = self.config.get("color_triggers")
+        if not isinstance(trigger_cfg, dict) or not trigger_cfg.get("enabled"):
+            return
+        try:
+            from actum.color_triggers.watcher import ColorTriggerWatcher
+        except ImportError:
+            print("[color_trigger] module unavailable (install actum[camera])")
+            return
+
+        watcher = ColorTriggerWatcher.from_agent_config(
+            self.config,
+            frame_reader=self.read_frame_bgr,
+            backend=self.runtime.backend,
+            config_path=self._config_path,
+        )
+        if watcher is None:
+            return
+        watcher.start()
+        self._color_trigger_watcher = watcher
 
     # ── Core agentic loop ──────────────────────────────────────────────────
 

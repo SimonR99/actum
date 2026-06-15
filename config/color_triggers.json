@@ -1,0 +1,31 @@
+{
+  "enabled": false,
+  "calibration": "config/color_triggers_calibration.json",
+  "detect_every_frames": 10,
+  "cooldown_seconds": 3.0,
+  "show_debug": false,
+  "actions": {
+    "group-1": {
+      "type": "speak",
+      "text": "Group one detected."
+    },
+    "group-2": {
+      "type": "drive",
+      "direction": "forward",
+      "distance_m": 0.3
+    },
+    "group-3": {
+      "type": "rotate",
+      "degrees": 90
+    },
+    "group-4": {
+      "type": "drive",
+      "direction": "backward",
+      "distance_m": 0.2
+    },
+    "group-5": {
+      "type": "speak",
+      "text": "All four colors detected."
+    }
+  }
+}
