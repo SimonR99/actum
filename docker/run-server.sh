@@ -128,6 +128,10 @@ fi
 # volume mount makes the container read directly from the host tree.
 VOLUMES_SECTION="${VOLUMES_SECTION}      - ${PROJECT_ROOT}/src:/workspace/src\n"
 
+# Entrypoint — mounted live so changes (e.g. pip caching for the lerobot
+# install) take effect without an image rebuild.
+VOLUMES_SECTION="${VOLUMES_SECTION}      - ${PROJECT_ROOT}/docker/entrypoint.sh:/entrypoint.sh:ro\n"
+
 # lerobot source — bind-mounted so the entrypoint can pip-install it on startup
 LEROBOT_SRC="/home/simon/lerobot"
 if [ -d "$LEROBOT_SRC" ]; then

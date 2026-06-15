@@ -93,6 +93,9 @@ _GESTURES: dict[str, list[tuple[list[int], float]]] = {
 }
 
 
+_ALL_MOTORS = _ARM_JOINTS + [_GRIPPER] + _WHEELS
+
+
 class LeKiwiBackend(RobotBackend):
     name = "lekiwi"
 
@@ -101,6 +104,35 @@ class LeKiwiBackend(RobotBackend):
         self._bus = None
         self._lekiwi = None
         self._serial_port: str = self.config.get("serial_port", "/dev/ttyACM0")
+        self._present_motors: set[str] = set()
+
+    def _probe_present_motors(self) -> set[str]:
+        """Ping each configured motor ID; SyncWrite does not fail on missing hardware."""
+        import scservo_sdk as scs
+
+        present: set[str] = set()
+        for name, (motor_id, _model) in self._bus.motors.items():
+            _model_num, comm, _err = self._bus.packet_handler.ping(
+                self._bus.port_handler, motor_id
+            )
+            if comm == scs.COMM_SUCCESS:
+                present.add(name)
+        return present
+
+    def _require_motors(
+        self, names: list[str], action: str, started_at: float
+    ) -> ActionResult | None:
+        missing = [name for name in names if name not in self._present_motors]
+        if not missing:
+            return None
+        return self._result(
+            action,
+            False,
+            f"Motor(s) not on bus: {missing}. Responding: {sorted(self._present_motors)}",
+            started_at,
+            missing_motors=missing,
+            present_motors=sorted(self._present_motors),
+        )
 
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -128,16 +160,30 @@ class LeKiwiBackend(RobotBackend):
             self._bus = FeetechMotorsBus(bus_cfg)
             self._bus.connect()
 
-            # Enable torque on all arm joints (position mode by default)
-            self._bus.write(
-                "Torque_Enable", TorqueMode.ENABLED.value, _ARM_JOINTS + [_GRIPPER]
-            )
+            self._present_motors = self._probe_present_motors()
+            missing = sorted(set(_ALL_MOTORS) - self._present_motors)
+            if missing:
+                print(
+                    f"[lekiwi] missing motors on bus (no response): {missing}"
+                )
+
+            arm_present = [
+                name for name in _ARM_JOINTS + [_GRIPPER] if name in self._present_motors
+            ]
+            if arm_present:
+                # Enable torque on reachable arm joints (position mode by default)
+                self._bus.write(
+                    "Torque_Enable", TorqueMode.ENABLED.value, arm_present
+                )
 
             # LeKiwi.__init__ sets wheels to velocity mode (Mode=1)
             self._lekiwi = LeKiwi(self._bus)
 
             self.connected = True
-            print(f"[lekiwi] connected on {self._serial_port}")
+            print(
+                f"[lekiwi] connected on {self._serial_port} "
+                f"({len(self._present_motors)}/{len(_ALL_MOTORS)} motors)"
+            )
             return True
         except Exception as exc:
             print(f"[lekiwi] connect failed: {exc}")
@@ -155,22 +201,36 @@ class LeKiwiBackend(RobotBackend):
             try:
                 from lerobot.common.robot_devices.motors.feetech import TorqueMode
 
-                self._bus.write(
-                    "Torque_Enable", TorqueMode.DISABLED.value, _ARM_JOINTS + [_GRIPPER]
-                )
+                arm_present = [
+                    name
+                    for name in _ARM_JOINTS + [_GRIPPER]
+                    if name in self._present_motors
+                ]
+                if arm_present:
+                    self._bus.write(
+                        "Torque_Enable",
+                        TorqueMode.DISABLED.value,
+                        arm_present,
+                    )
                 self._bus.disconnect()
             except Exception:
                 pass
         self._bus = None
         self._lekiwi = None
+        self._present_motors = set()
         self.connected = False
 
     def get_state(self) -> RobotState:
+        missing = sorted(set(_ALL_MOTORS) - self._present_motors)
         return RobotState(
             backend=self.name,
             connected=self.connected,
             mode="hardware" if self.connected else "offline",
-            metadata={"serial_port": self._serial_port},
+            metadata={
+                "serial_port": self._serial_port,
+                "present_motors": sorted(self._present_motors),
+                "missing_motors": missing,
+            },
         )
 
     # ── Motion ───────────────────────────────────────────────────────────────
@@ -256,7 +316,21 @@ class LeKiwiBackend(RobotBackend):
             )
 
         for positions, delay in seq:
-            self._bus.write("Goal_Position", positions, _ARM_JOINTS)
+            names = [
+                joint
+                for joint in _ARM_JOINTS
+                if joint in self._present_motors
+            ]
+            if not names:
+                return self._result(
+                    "gesture",
+                    False,
+                    "No arm motors on bus.",
+                    started,
+                    gesture=name,
+                )
+            values = [positions[_ARM_JOINTS.index(joint)] for joint in names]
+            self._bus.write("Goal_Position", values, names)
             time.sleep(delay)
         return self._result("gesture", True, f"Gesture: {name}", started, gesture=name)
 
@@ -267,9 +341,47 @@ class LeKiwiBackend(RobotBackend):
                 "gripper", False, "Not connected.", started, gripper_action=action
             )
 
+        blocked = self._require_motors([_GRIPPER], "gripper", started)
+        if blocked is not None:
+            blocked.data["gripper_action"] = action
+            return blocked
+
         pos = 1200 if action.lower() in ("open", "release") else 2800
+        try:
+            before = int(self._bus.read("Present_Position", _GRIPPER)[0])
+        except Exception as exc:
+            return self._result(
+                "gripper",
+                False,
+                f"Gripper not reachable: {exc}",
+                started,
+                gripper_action=action,
+            )
+
         self._bus.write("Goal_Position", pos, _GRIPPER)
-        time.sleep(0.5)
+        time.sleep(0.8)
+        try:
+            after = int(self._bus.read("Present_Position", _GRIPPER)[0])
+        except Exception as exc:
+            return self._result(
+                "gripper",
+                False,
+                f"Gripper command sent but read failed: {exc}",
+                started,
+                gripper_action=action,
+            )
+
+        if abs(after - before) < 20 and abs(after - pos) > 50:
+            return self._result(
+                "gripper",
+                False,
+                f"Gripper did not move (position stayed near {after}).",
+                started,
+                gripper_action=action,
+                present_position=after,
+                goal_position=pos,
+            )
+
         return self._result(
             "gripper", True, f"Gripper {action}", started, gripper_action=action
         )
@@ -289,6 +401,11 @@ class LeKiwiBackend(RobotBackend):
                 f"Unknown joints: {unknown}. Valid: {sorted(valid)}",
                 started,
             )
+
+        blocked = self._require_motors(list(positions.keys()), "arm_pose", started)
+        if blocked is not None:
+            blocked.data["positions"] = positions
+            return blocked
 
         for joint, pos in positions.items():
             pos = max(0, min(4095, int(pos)))

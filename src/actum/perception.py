@@ -490,14 +490,28 @@ def _ms_to_chunks(env_name: str, default_chunks: int, ms_per_chunk: float) -> in
         return default_chunks
 
 
+def _env_float(name: str, default: float) -> float:
+    """Read an optional float env-var override, returning *default* on missing/invalid."""
+    value = _env(name)
+    if not value:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
 def build_default_vad():
     """Build the best available VAD: SileroVAD if faster_whisper is present, else EnergyVAD.
 
     Tune capture boundaries without code edits via:
-      ACTUM_VAD_SILENCE_MS  — hangover before speech is considered finished
-                              (raise it if word endings get clipped).
-      ACTUM_VAD_PREROLL_MS  — audio kept before speech onset
-                              (raise it if word beginnings get clipped).
+      ACTUM_VAD_SILENCE_MS    — hangover before speech is considered finished
+                                (raise it if word endings get clipped).
+      ACTUM_VAD_PREROLL_MS    — audio kept before speech onset
+                                (raise it if word beginnings get clipped).
+      ACTUM_VAD_THRESHOLD     — Silero speech-start probability (default 0.4;
+                                lower = more sensitive, higher = less false triggers).
+      ACTUM_VAD_NEG_THRESHOLD — Silero speech-end probability (default 0.25).
     """
     try:
         import faster_whisper.vad  # noqa: F401
@@ -508,6 +522,8 @@ def build_default_vad():
         return SileroVAD(
             silence_chunks=_ms_to_chunks("ACTUM_VAD_SILENCE_MS", 19, 32.0),
             pre_roll_chunks=_ms_to_chunks("ACTUM_VAD_PREROLL_MS", 12, 32.0),
+            threshold=_env_float("ACTUM_VAD_THRESHOLD", 0.4),
+            neg_threshold=_env_float("ACTUM_VAD_NEG_THRESHOLD", 0.25),
         )
     except Exception as e:
         print(
